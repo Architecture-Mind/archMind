@@ -195,3 +195,109 @@ describe("traceByPattern('request')", () => {
     expect(r.results).toHaveLength(0)
   })
 })
+
+// ---- trace-side_effects (Phase 23) ----------------------------------------
+
+const invoiceGraph: IntermediateExecutionGraph = {
+  entrypoint: "POST /api/v1/invoices",
+  method: "POST", path: "/api/v1/invoices",
+  framework: "laravel", adapter_ver: "0.1.0", ir_ver: "1.4",
+  nodes: [
+    { id: "ctrl",  type: "ir:business_handler", symbol: "InvoicesController::store" },
+    { id: "job",   type: "ir:queue_job",        symbol: "GenerateInvoicePdfJob" },
+    { id: "res",   type: "ir:api_resource",     symbol: "InvoiceResource::toArray" },
+  ],
+  edges: [], annotations: [],
+}
+
+const pdfGraph: IntermediateExecutionGraph = {
+  entrypoint: "GET /invoices/view/{token}",
+  method: "GET", path: "/invoices/view/{token}",
+  framework: "laravel", adapter_ver: "0.1.0", ir_ver: "1.4",
+  nodes: [
+    { id: "ctrl", type: "ir:business_handler", symbol: "InvoicePdfController::getPdf" },
+    { id: "mail_sync",  type: "ir:mail", symbol: "InvoiceViewedMail::build",  detail: { className: "InvoiceViewedMail", queued: false } as unknown as string },
+    { id: "mail_queued", type: "ir:mail", symbol: "InvoiceSentMail::build",   detail: { className: "InvoiceSentMail",   queued: true  } as unknown as string },
+    { id: "notif", type: "ir:notification", symbol: "InvoiceViewedNotification::toArray" },
+    { id: "evt",   type: "ir:event_dispatch", symbol: "InvoiceViewed" },
+  ],
+  edges: [], annotations: [],
+}
+
+const authOnlyGraph: IntermediateExecutionGraph = {
+  entrypoint: "GET /api/v1/invoices",
+  method: "GET", path: "/api/v1/invoices",
+  framework: "laravel", adapter_ver: "0.1.0", ir_ver: "1.0",
+  nodes: [
+    { id: "auth", type: "ir:auth_gate", symbol: "auth:sanctum" },
+    { id: "ctrl", type: "ir:business_handler", symbol: "InvoicesController::index" },
+  ],
+  edges: [], annotations: [],
+}
+
+const sideEffectGraphs = [invoiceGraph, pdfGraph, authOnlyGraph]
+
+describe("traceByPattern('side_effects')", () => {
+  const result = traceByPattern("side_effects", sideEffectGraphs)
+
+  it("returns side_effects pattern", () => {
+    expect(result.pattern).toBe("side_effects")
+  })
+
+  it("total_routes covers all 3 graphs", () => {
+    expect(result.total_routes).toBe(3)
+  })
+
+  it("invoiceGraph entry has queue_job and api_resource", () => {
+    const entry = result.results.find((r) => r.entrypoint === "POST /api/v1/invoices")!
+    expect(entry.queue_jobs).toContain("GenerateInvoicePdfJob")
+    expect(entry.api_resources).toContain("InvoiceResource::toArray")
+    expect(entry.has_side_effects).toBe(true)
+  })
+
+  it("pdfGraph entry detects synchronous mail but not queued mail", () => {
+    const entry = result.results.find((r) => r.entrypoint === "GET /invoices/view/{token}")!
+    expect(entry.mails).toContain("InvoiceViewedMail::build")
+    expect(entry.mails).toContain("InvoiceSentMail::build")
+    expect(entry.synchronous_mails).toContain("InvoiceViewedMail::build")
+    expect(entry.synchronous_mails).not.toContain("InvoiceSentMail::build")
+  })
+
+  it("pdfGraph entry has notification and event_dispatch", () => {
+    const entry = result.results.find((r) => r.entrypoint === "GET /invoices/view/{token}")!
+    expect(entry.notifications).toContain("InvoiceViewedNotification::toArray")
+    expect(entry.event_dispatches).toContain("InvoiceViewed")
+    expect(entry.has_side_effects).toBe(true)
+  })
+
+  it("authOnlyGraph has no side effects", () => {
+    const entry = result.results.find((r) => r.entrypoint === "GET /api/v1/invoices")!
+    expect(entry.has_side_effects).toBe(false)
+    expect(entry.queue_jobs).toHaveLength(0)
+    expect(entry.mails).toHaveLength(0)
+  })
+
+  it("summary counts routes with queue jobs", () => {
+    expect(result.summary.routes_with_queue_jobs).toBe(1)
+  })
+
+  it("summary counts routes with mails", () => {
+    expect(result.summary.routes_with_mails).toBe(1)
+  })
+
+  it("summary counts routes with synchronous mails", () => {
+    expect(result.summary.routes_with_synchronous_mails).toBe(1)
+  })
+
+  it("summary counts routes with notifications", () => {
+    expect(result.summary.routes_with_notifications).toBe(1)
+  })
+
+  it("summary counts routes with event dispatches", () => {
+    expect(result.summary.routes_with_event_dispatches).toBe(1)
+  })
+
+  it("summary counts routes with api resources", () => {
+    expect(result.summary.routes_with_api_resources).toBe(1)
+  })
+})

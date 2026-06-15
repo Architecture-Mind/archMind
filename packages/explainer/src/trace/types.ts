@@ -1,4 +1,4 @@
-export type TracePattern = "auth" | "event" | "transaction" | "isolation" | "request"
+export type TracePattern = "auth" | "event" | "transaction" | "isolation" | "request" | "side_effects"
 
 export interface AuthTraceEntry {
   entrypoint: string
@@ -40,12 +40,33 @@ export interface RequestTraceEntry {
   }>
 }
 
+export interface SideEffectsTraceEntry {
+  entrypoint:        string
+  queue_jobs:        string[]   // ir:queue_job symbols
+  event_dispatches:  string[]   // ir:event_dispatch symbols
+  api_resources:     string[]   // ir:api_resource symbols
+  notifications:     string[]   // ir:notification symbols
+  mails:             string[]   // ir:mail symbols (all)
+  synchronous_mails: string[]   // ir:mail where detail.queued !== true
+  has_side_effects:  boolean
+}
+
+export interface SideEffectsTraceSummary {
+  routes_with_queue_jobs:        number
+  routes_with_event_dispatches:  number
+  routes_with_api_resources:     number
+  routes_with_notifications:     number
+  routes_with_mails:             number
+  routes_with_synchronous_mails: number
+}
+
 export type TraceEntry =
   | AuthTraceEntry
   | EventTraceEntry
   | TransactionTraceEntry
   | IsolationTraceEntry
   | RequestTraceEntry
+  | SideEffectsTraceEntry
 
 export interface AuthTraceSummary {
   routes_with_auth: number

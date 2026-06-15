@@ -8,6 +8,8 @@ import type {
   TransactionTraceEntry,
   IsolationTraceEntry,
   RequestTraceEntry,
+  SideEffectsTraceEntry,
+  SideEffectsTraceSummary,
   TraceResult,
 } from "./types.js"
 
@@ -183,6 +185,67 @@ function traceRequest(
   }
 }
 
+// ---- Side-effects trace ----------------------------------------------------
+
+function parseMailDetail(raw: unknown): { queued?: boolean } {
+  if (!raw) return {}
+  if (typeof raw === "object") return raw as { queued?: boolean }
+  try { return JSON.parse(raw as string) as { queued?: boolean } } catch { return {} }
+}
+
+function traceSideEffects(
+  graphs: IntermediateExecutionGraph[]
+): TraceResult<SideEffectsTraceEntry, SideEffectsTraceSummary> {
+  const results: SideEffectsTraceEntry[] = []
+
+  for (const g of graphs) {
+    const queue_jobs       = g.nodes.filter((n) => n.type === "ir:queue_job").map((n) => n.symbol)
+    const event_dispatches = g.nodes.filter((n) => n.type === "ir:event_dispatch").map((n) => n.symbol)
+    const api_resources    = g.nodes.filter((n) => n.type === "ir:api_resource").map((n) => n.symbol)
+    const notifications    = g.nodes.filter((n) => n.type === "ir:notification").map((n) => n.symbol)
+    const mailNodes        = g.nodes.filter((n) => n.type === "ir:mail")
+    const mails            = mailNodes.map((n) => n.symbol)
+    const synchronous_mails = mailNodes
+      .filter((n) => {
+        const detail = parseMailDetail(n.detail)
+        return detail.queued !== true
+      })
+      .map((n) => n.symbol)
+
+    const has_side_effects =
+      queue_jobs.length > 0 ||
+      event_dispatches.length > 0 ||
+      api_resources.length > 0 ||
+      notifications.length > 0 ||
+      mails.length > 0
+
+    results.push({
+      entrypoint: g.entrypoint,
+      queue_jobs,
+      event_dispatches,
+      api_resources,
+      notifications,
+      mails,
+      synchronous_mails,
+      has_side_effects,
+    })
+  }
+
+  return {
+    pattern: "side_effects",
+    total_routes: graphs.length,
+    results,
+    summary: {
+      routes_with_queue_jobs:        results.filter((r) => r.queue_jobs.length > 0).length,
+      routes_with_event_dispatches:  results.filter((r) => r.event_dispatches.length > 0).length,
+      routes_with_api_resources:     results.filter((r) => r.api_resources.length > 0).length,
+      routes_with_notifications:     results.filter((r) => r.notifications.length > 0).length,
+      routes_with_mails:             results.filter((r) => r.mails.length > 0).length,
+      routes_with_synchronous_mails: results.filter((r) => r.synchronous_mails.length > 0).length,
+    },
+  }
+}
+
 // ---- Public API ------------------------------------------------------------
 
 export function traceByPattern(
@@ -192,10 +255,11 @@ export function traceByPattern(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): TraceResult<any, any> {
   switch (pattern) {
-    case "auth":        return traceAuth(graphs)
-    case "event":       return traceEvent(graphs)
-    case "transaction": return traceTransaction(graphs)
-    case "isolation":   return traceIsolation(graphs)
-    case "request":     return traceRequest(graphs, entrypoint ?? "")
+    case "auth":         return traceAuth(graphs)
+    case "event":        return traceEvent(graphs)
+    case "transaction":  return traceTransaction(graphs)
+    case "isolation":    return traceIsolation(graphs)
+    case "request":      return traceRequest(graphs, entrypoint ?? "")
+    case "side_effects": return traceSideEffects(graphs)
   }
 }

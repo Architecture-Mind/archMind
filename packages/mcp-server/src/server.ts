@@ -268,15 +268,16 @@ export function createServer(): McpServer {
         "Run a cross-route trace query across the entire project. " +
         "Returns a structured summary of how all routes relate to a specific concern.\n\n" +
         "Patterns:\n" +
-        "  auth        — auth chains for every route: middleware, policies, form_requests, unprotected resources\n" +
-        "  event       — routes that dispatch events, with unsafe-dispatch detection\n" +
-        "  transaction — routes with DB transaction boundaries, writes, and escapes\n" +
-        "  isolation   — routes with unscoped queries or writes (tenant isolation gaps)\n" +
-        "  request     — full execution path for a single route (requires entrypoint)",
+        "  auth         — auth chains for every route: middleware, policies, form_requests, unprotected resources\n" +
+        "  event        — routes that dispatch events, with unsafe-dispatch detection\n" +
+        "  transaction  — routes with DB transaction boundaries, writes, and escapes\n" +
+        "  isolation    — routes with unscoped queries or writes (tenant isolation gaps)\n" +
+        "  side_effects — routes that dispatch queue jobs, send mail/notifications, or return API resources; flags synchronous mail\n" +
+        "  request      — full execution path for a single route (requires entrypoint)",
       inputSchema: {
         project_root: z.string().describe("Absolute path to the project root (Laravel or NestJS)"),
         pattern: z
-          .enum(["auth", "event", "transaction", "isolation", "request"])
+          .enum(["auth", "event", "transaction", "isolation", "side_effects", "request"])
           .describe("Trace pattern to run"),
         entrypoint: z
           .string()
