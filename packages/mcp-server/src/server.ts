@@ -297,16 +297,17 @@ export function createServer(): McpServer {
     "archmind_get_dependents",
     {
       description:
-        "Find all routes that depend on a service class or method. " +
-        "Use to answer 'What breaks if I change X?' or 'Which routes call OrderService?'. " +
-        "Pass a class name (e.g. 'OrderService') for all methods, or a full symbol " +
-        "(e.g. 'OrderService::create') for a specific method.",
+        "Find all routes that depend on a service class, method, queue job, mail, notification, event, or API resource. " +
+        "Use to answer 'What breaks if I change X?' or 'Which routes dispatch GenerateInvoicePdfJob?'. " +
+        "Pass a class name (e.g. 'OrderService', 'GenerateInvoicePdfJob') for all usages, or a full symbol " +
+        "(e.g. 'OrderService::create', 'InvoiceViewedMail::build') for a specific method.",
       inputSchema: {
         project_root: z.string().describe("Absolute path to the project root (Laravel or NestJS)"),
         symbol: z
           .string()
           .describe(
-            "Service class or method to query. Examples: 'CartService', 'PaymentService::refund'"
+            "Service class, method, job class, mail class, or API resource to query. " +
+            "Examples: 'CartService', 'PaymentService::refund', 'GenerateInvoicePdfJob', 'InvoiceResource'"
           ),
       },
     },

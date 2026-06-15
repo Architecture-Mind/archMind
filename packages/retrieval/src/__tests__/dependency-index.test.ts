@@ -55,7 +55,42 @@ const NO_SERVICES: IntermediateExecutionGraph = {
   edges: [], annotations: [],
 }
 
+// Side-effect fixture graphs (Phase 21)
+const INVOICE_CREATE: IntermediateExecutionGraph = {
+  entrypoint: "POST /api/v1/invoices",
+  method: "POST", path: "/api/v1/invoices",
+  nodes: [
+    { id: "ctrl", type: "ir:business_handler", symbol: "InvoicesController::store", role: "handler" },
+    { id: "job1", type: "ir:queue_job",        symbol: "GenerateInvoicePdfJob",     role: "side_effect" },
+    { id: "res1", type: "ir:api_resource",     symbol: "InvoiceResource::toArray",  role: "response" },
+  ],
+  edges: [], annotations: [],
+}
+
+const INVOICE_PDF: IntermediateExecutionGraph = {
+  entrypoint: "GET /invoices/view/{email_log}",
+  method: "GET", path: "/invoices/view/{email_log}",
+  nodes: [
+    { id: "ctrl", type: "ir:business_handler", symbol: "InvoicePdfController::getPdf",   role: "handler" },
+    { id: "mail", type: "ir:mail",             symbol: "InvoiceViewedMail::build",        role: "side_effect" },
+  ],
+  edges: [], annotations: [],
+}
+
+const ORDER_NOTIFY: IntermediateExecutionGraph = {
+  entrypoint: "POST /orders/complete",
+  method: "POST", path: "/orders/complete",
+  nodes: [
+    { id: "ctrl",  type: "ir:business_handler", symbol: "OrderController::complete",           role: "handler" },
+    { id: "notif", type: "ir:notification",      symbol: "OrderCompletedNotification::toArray", role: "side_effect" },
+    { id: "evt",   type: "ir:event_dispatch",    symbol: "OrderCompleted",                      role: "side_effect" },
+    { id: "job1",  type: "ir:queue_job",         symbol: "GenerateInvoicePdfJob",               role: "side_effect" },
+  ],
+  edges: [], annotations: [],
+}
+
 const ALL_GRAPHS = [ORDER_CREATE, ORDER_ADMIN, ORDER_SHOW, CART_ROUTE, NO_SERVICES]
+const ALL_GRAPHS_V2 = [...ALL_GRAPHS, INVOICE_CREATE, INVOICE_PDF, ORDER_NOTIFY]
 
 // ---- buildDependencyIndex -------------------------------------------
 
@@ -203,5 +238,96 @@ describe("buildDependencyIndex — edge cases", () => {
     const index = buildDependencyIndex([])
     expect(queryDependents(index, "OrderService::create")).toHaveLength(0)
     expect(queryDependents(index, "OrderService")).toHaveLength(0)
+  })
+})
+
+// ---- Side-effect node types (Phase 21) ------------------------------
+
+describe("buildDependencyIndex — side-effect node types", () => {
+  const index = buildDependencyIndex(ALL_GRAPHS_V2)
+
+  test("indexes ir:queue_job by symbol", () => {
+    expect(index.bySymbol.has("GenerateInvoicePdfJob")).toBe(true)
+  })
+
+  test("queue_job dispatched from multiple routes appears in both", () => {
+    const eps = index.bySymbol.get("GenerateInvoicePdfJob")!
+    expect(eps.has("POST /api/v1/invoices")).toBe(true)
+    expect(eps.has("POST /orders/complete")).toBe(true)
+    expect(eps.size).toBe(2)
+  })
+
+  test("indexes ir:mail by symbol", () => {
+    expect(index.bySymbol.has("InvoiceViewedMail::build")).toBe(true)
+    const eps = index.bySymbol.get("InvoiceViewedMail::build")!
+    expect(eps.has("GET /invoices/view/{email_log}")).toBe(true)
+    expect(eps.size).toBe(1)
+  })
+
+  test("indexes ir:mail by class (no-method query)", () => {
+    const eps = index.byClass.get("InvoiceViewedMail")!
+    expect(eps.has("GET /invoices/view/{email_log}")).toBe(true)
+  })
+
+  test("indexes ir:api_resource by symbol", () => {
+    expect(index.bySymbol.has("InvoiceResource::toArray")).toBe(true)
+  })
+
+  test("indexes ir:notification by class", () => {
+    const eps = index.byClass.get("OrderCompletedNotification")!
+    expect(eps.has("POST /orders/complete")).toBe(true)
+  })
+
+  test("indexes ir:event_dispatch by class", () => {
+    const eps = index.byClass.get("OrderCompleted")!
+    expect(eps.has("POST /orders/complete")).toBe(true)
+  })
+
+  test("business_handler nodes are NOT indexed", () => {
+    expect(index.bySymbol.has("InvoicesController::store")).toBe(false)
+    expect(index.byClass.has("InvoicesController")).toBe(false)
+  })
+})
+
+describe("queryDependents — side-effect types", () => {
+  const index = buildDependencyIndex(ALL_GRAPHS_V2)
+
+  test("exact queue_job symbol returns correct routes", () => {
+    const hits = queryDependents(index, "GenerateInvoicePdfJob")
+    expect(hits).toHaveLength(2)
+    const eps = hits.map((h) => h.entrypoint).sort()
+    expect(eps[0]).toBe("POST /api/v1/invoices")
+    expect(eps[1]).toBe("POST /orders/complete")
+  })
+
+  test("matchingNodes for queue_job hit include only the job node", () => {
+    const hits = queryDependents(index, "GenerateInvoicePdfJob")
+    const invoiceHit = hits.find((h) => h.entrypoint === "POST /api/v1/invoices")!
+    expect(invoiceHit.matchingNodes).toHaveLength(1)
+    expect(invoiceHit.matchingNodes[0].type).toBe("ir:queue_job")
+  })
+
+  test("exact mail symbol (with method) returns correct route", () => {
+    const hits = queryDependents(index, "InvoiceViewedMail::build")
+    expect(hits).toHaveLength(1)
+    expect(hits[0].entrypoint).toBe("GET /invoices/view/{email_log}")
+  })
+
+  test("class-only query for mail class returns route via byClass", () => {
+    const hits = queryDependents(index, "InvoiceViewedMail")
+    expect(hits).toHaveLength(1)
+    expect(hits[0].entrypoint).toBe("GET /invoices/view/{email_log}")
+  })
+
+  test("class-only query for notification class returns route", () => {
+    const hits = queryDependents(index, "OrderCompletedNotification")
+    expect(hits).toHaveLength(1)
+    expect(hits[0].entrypoint).toBe("POST /orders/complete")
+  })
+
+  test("service_call nodes are still indexed alongside side-effect nodes", () => {
+    const hits = queryDependents(index, "OrderService::create")
+    expect(hits).toHaveLength(1)
+    expect(hits[0].entrypoint).toBe("POST /orders")
   })
 })

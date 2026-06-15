@@ -85,8 +85,8 @@ describe("runBenchmark — P2.7 post-B (with service_call nodes)", () => {
     })
   })
 
-  test("snapshot covers all 4 traces", () => {
-    expect(snapshot.summary.total_traces).toBe(6)
+  test("snapshot covers all 9 traces", () => {
+    expect(snapshot.summary.total_traces).toBe(9)
   })
 
   test("AUTH-001 recall improves over P2-baseline (was 0.71)", () => {

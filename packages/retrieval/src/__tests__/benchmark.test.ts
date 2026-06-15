@@ -84,8 +84,8 @@ describe("runBenchmark — P2 baseline", () => {
     })
   })
 
-  test("snapshot covers all 6 traces", () => {
-    expect(snapshot.summary.total_traces).toBe(6)
+  test("snapshot covers all 9 traces", () => {
+    expect(snapshot.summary.total_traces).toBe(9)
   })
 
   test("AUTH-001 has extraction_ceiling recall gap", () => {
@@ -110,7 +110,7 @@ describe("runBenchmark — P2 baseline", () => {
     writeFileSync(outPath, JSON.stringify(snapshot, null, 2))
     const saved = JSON.parse(readFileSync(outPath, "utf-8"))
     expect(saved.label).toBe("P2-baseline")
-    expect(saved.summary.total_traces).toBe(6)
+    expect(saved.summary.total_traces).toBe(9)
   })
 
   test("prints benchmark table", () => {
