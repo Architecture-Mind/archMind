@@ -398,10 +398,10 @@ async function main() {
       routes: a.routes.length,
       inventory: Object.fromEntries(CATEGORIES.map(c => [c.id, (a.corpus[c.id] ?? []).length])),
       gaps: {
-        queue_job:      a.dispatchedJobs.map(d => `${d.controller} → ${d.job}`),
-        event_dispatch: a.dispatchedEvents.map(d => `${d.controller} → ${d.event}`),
-        gate_call:      a.gateCalls.map(g => `${g.controller}.${g.method}('${g.ability}')`),
-        api_resource:   a.apiResourceUsage.map(r => `${r.controller} → ${r.resource}`),
+        queue_job:      a.dispatchedJobs.map(d => `${d.caller}[${d.source}] → ${d.job}`),
+        event_dispatch: a.dispatchedEvents.map(d => `${d.caller}[${d.source}] → ${d.event}`),
+        gate_call:      a.gateCalls.map(g => `${g.caller}[${g.source}].${g.method}('${g.ability}')`),
+        api_resource:   a.apiResourceUsage.map(r => `${r.caller}[${r.source}] → ${r.resource}`),
       },
     })),
   }
