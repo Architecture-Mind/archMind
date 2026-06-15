@@ -44,7 +44,7 @@ export type Confidence = "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN"
 
 export type EdgeTraceability = "static" | "semantic" | "runtime" | "probabilistic"
 
-export type RetrievalFocus = "auth" | "validation" | "runtime" | "transaction" | "isolation" | "all"
+export type RetrievalFocus = "auth" | "validation" | "runtime" | "transaction" | "isolation" | "side_effects" | "all"
 
 export interface ExecutionNode {
   id:               string

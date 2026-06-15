@@ -1,4 +1,4 @@
-import { retrieve, prune, classifyNode, deduplicate, rankByQuery } from "../retrieval-engine.js"
+import { retrieve, prune, classifyNode, deduplicate, rankByQuery, pruneBySideEffects } from "../retrieval-engine.js"
 import type { IntermediateExecutionGraph, RetrievalResult } from "@archmind/protocol"
 import { PROTOCOL_VERSION } from "@archmind/protocol"
 
@@ -354,5 +354,115 @@ describe("rankByQuery — keyword-based node ordering", () => {
     const firstRoleIdx = symbols.findIndex((s) => s.toLowerCase().includes("role"))
     const tenantIdx    = symbols.findIndex((s) => s.includes("ResolveTenant"))
     expect(firstRoleIdx).toBeLessThan(tenantIdx)
+  })
+})
+
+// ---- side_effects focus mode (Phase 22) ---------------------------------
+
+const SIDE_EFFECT_GRAPH: IntermediateExecutionGraph = {
+  entrypoint: "POST /api/v1/invoices",
+  method: "POST", path: "/api/v1/invoices",
+  nodes: [
+    { id: "auth",  type: "ir:auth_gate",        symbol: "auth:sanctum",              role: "authentication" },
+    { id: "authz", type: "ir:authz_check",       symbol: "can:create-invoice",        role: "authorization" },
+    { id: "ctrl",  type: "ir:business_handler",  symbol: "InvoicesController::store", role: "handler" },
+    { id: "svc",   type: "ir:service_call",      symbol: "InvoiceService::create",    role: "service" },
+    { id: "job",   type: "ir:queue_job",         symbol: "GenerateInvoicePdfJob",     role: "side_effect" },
+    { id: "res",   type: "ir:api_resource",      symbol: "InvoiceResource::toArray",  role: "response" },
+    { id: "notif", type: "ir:notification",      symbol: "InvoiceCreatedNotification::toArray", role: "side_effect" },
+    { id: "mail",  type: "ir:mail",              symbol: "InvoiceCreatedMail::build", role: "side_effect" },
+    { id: "evt",   type: "ir:event_dispatch",    symbol: "InvoiceCreated",            role: "side_effect" },
+  ],
+  edges: [
+    { from: "auth",  to: "authz", relation: "next_middleware", traceability: "static" },
+    { from: "authz", to: "ctrl",  relation: "next_middleware", traceability: "static" },
+    { from: "ctrl",  to: "svc",   relation: "calls",           traceability: "static" },
+    { from: "ctrl",  to: "job",   relation: "dispatches",      traceability: "static" },
+    { from: "ctrl",  to: "res",   relation: "returns",         traceability: "static" },
+    { from: "ctrl",  to: "notif", relation: "sends",           traceability: "static" },
+    { from: "ctrl",  to: "mail",  relation: "sends",           traceability: "static" },
+    { from: "ctrl",  to: "evt",   relation: "dispatches",      traceability: "static" },
+  ],
+  annotations: [],
+}
+
+describe("retrieve — side_effects focus", () => {
+  const result = retrieve({ entrypoint: "POST /api/v1/invoices", focus: "side_effects" }, [SIDE_EFFECT_GRAPH])
+
+  test("returns non-null result", () => {
+    expect(result).not.toBeNull()
+  })
+
+  test("result is pruned", () => {
+    expect(result!.pruned).toBe(true)
+  })
+
+  test("keeps queue_job, api_resource, notification, mail, event_dispatch", () => {
+    const types = new Set(result!.nodes.map((n) => n.type))
+    expect(types.has("ir:queue_job")).toBe(true)
+    expect(types.has("ir:api_resource")).toBe(true)
+    expect(types.has("ir:notification")).toBe(true)
+    expect(types.has("ir:mail")).toBe(true)
+    expect(types.has("ir:event_dispatch")).toBe(true)
+  })
+
+  test("keeps business_handler as controller context", () => {
+    const types = new Set(result!.nodes.map((n) => n.type))
+    expect(types.has("ir:business_handler")).toBe(true)
+  })
+
+  test("drops auth_gate, authz_check, service_call", () => {
+    const types = new Set(result!.nodes.map((n) => n.type))
+    expect(types.has("ir:auth_gate")).toBe(false)
+    expect(types.has("ir:authz_check")).toBe(false)
+    expect(types.has("ir:service_call")).toBe(false)
+  })
+
+  test("drops edges pointing to removed nodes", () => {
+    const keptIds = new Set(result!.nodes.map((n) => n.id))
+    for (const edge of result!.edges) {
+      expect(keptIds.has(edge.from)).toBe(true)
+      expect(keptIds.has(edge.to)).toBe(true)
+    }
+  })
+
+  test("focus field is set to side_effects", () => {
+    expect(result!.focus).toBe("side_effects")
+  })
+
+  test("token estimate is lower than unpruned full graph", () => {
+    const full = retrieve({ entrypoint: "POST /api/v1/invoices" }, [SIDE_EFFECT_GRAPH])
+    expect(result!.token_estimate).toBeLessThan(full!.token_estimate)
+  })
+})
+
+describe("pruneBySideEffects — direct call", () => {
+  const fullResult: RetrievalResult = {
+    entrypoint:       "POST /api/v1/invoices",
+    nodes:            SIDE_EFFECT_GRAPH.nodes,
+    edges:            SIDE_EFFECT_GRAPH.edges,
+    token_estimate:   999,
+    pruned:           false,
+    focus:            "side_effects",
+    protocol_version: PROTOCOL_VERSION,
+  }
+  const pruned = pruneBySideEffects(fullResult)
+
+  test("result has 6 nodes (5 side-effect + 1 handler)", () => {
+    expect(pruned.nodes).toHaveLength(6)
+  })
+
+  test("pruned flag is set", () => {
+    expect(pruned.pruned).toBe(true)
+  })
+
+  test("graph without side-effect nodes produces only business_handler", () => {
+    const authOnly: RetrievalResult = {
+      ...fullResult,
+      nodes: SIDE_EFFECT_GRAPH.nodes.filter((n) => n.type === "ir:auth_gate" || n.type === "ir:authz_check"),
+      edges: [],
+    }
+    const r = pruneBySideEffects(authOnly)
+    expect(r.nodes).toHaveLength(0)
   })
 })

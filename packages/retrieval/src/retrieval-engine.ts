@@ -16,14 +16,25 @@ export type { RetrievalFocus }
 
 // Focus → minimum relevance level for each semantic section.
 // Nodes below threshold are pruned; the rest are kept intact.
-const FOCUS_THRESHOLD: Record<RetrievalFocus, RetrievalRelevance> = {
+// "side_effects" uses type-based filtering (see pruneBySideEffects) instead of relevance.
+const FOCUS_THRESHOLD: Record<Exclude<RetrievalFocus, "side_effects" | "all">, RetrievalRelevance> = {
   auth:        "HIGH",    // only auth-critical nodes
   validation:  "MEDIUM",  // validation + auth context
   runtime:     "MEDIUM",  // runtime injection + middleware
   transaction: "HIGH",    // transaction boundary + escapes only
   isolation:   "HIGH",    // unscoped query + tenant injection only
-  all:         "LOW",     // everything (R0 behaviour)
 }
+
+// Node types kept under the side_effects focus.
+// Includes the business handler so the caller knows which controller triggered them.
+const SIDE_EFFECT_TYPES = new Set([
+  "ir:queue_job",
+  "ir:event_dispatch",
+  "ir:api_resource",
+  "ir:notification",
+  "ir:mail",
+  "ir:business_handler",
+])
 
 // Node types where repeated occurrences carry no additional semantic meaning
 // and are safe to merge. Caller-scoped types (service_call, policy, permission,
@@ -64,7 +75,9 @@ export function retrieve(
   result = deduplicate(result)
   result = rankByQuery(result, request.query)
 
-  if (focus !== "all") {
+  if (focus === "side_effects") {
+    result = pruneBySideEffects(result)
+  } else if (focus !== "all") {
     result = prune(result, FOCUS_THRESHOLD[focus])
   }
 
@@ -186,6 +199,25 @@ export function prune(
     (e) => keptIds.has(e.from) && keptIds.has(e.to)
   )
 
+  return {
+    entrypoint:       result.entrypoint,
+    nodes:            keptNodes,
+    edges:            keptEdges,
+    token_estimate:   estimateTokens(keptNodes, keptEdges),
+    pruned:           true,
+    focus:            result.focus,
+    protocol_version: result.protocol_version,
+  }
+}
+
+// Type-based filter for the side_effects focus.
+// Keeps only side-effect node types plus the business handler for controller context.
+export function pruneBySideEffects(result: RetrievalResult): RetrievalResult {
+  const keptNodes = result.nodes.filter((n) => SIDE_EFFECT_TYPES.has(n.type))
+  const keptIds   = new Set(keptNodes.map((n) => n.id))
+  const keptEdges = result.edges.filter(
+    (e) => keptIds.has(e.from) && keptIds.has(e.to)
+  )
   return {
     entrypoint:       result.entrypoint,
     nodes:            keptNodes,

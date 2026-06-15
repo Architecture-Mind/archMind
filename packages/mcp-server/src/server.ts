@@ -9,7 +9,7 @@ import { PROTOCOL_VERSION } from "@archmind/protocol"
 import { ingestOtlpFile } from "@archmind/runtime-ingest"
 import { correlateSession, detectNPlusOne, detectSlowQuery } from "@archmind/runtime-correlator"
 
-const FOCUS_VALUES = ["auth", "validation", "runtime", "transaction", "isolation", "all"] as const
+const FOCUS_VALUES = ["auth", "validation", "runtime", "transaction", "isolation", "side_effects", "all"] as const
 
 export function createServer(): McpServer {
   const server = new McpServer({
@@ -68,7 +68,7 @@ export function createServer(): McpServer {
     "archmind_get_execution_graph",
     {
       description:
-        "Return the semantic execution graph for a specific entrypoint in a Laravel or NestJS project. Use `focus` to narrow to a concern (auth, validation, runtime, transaction, isolation, all). Framework is auto-detected.",
+        "Return the semantic execution graph for a specific entrypoint in a Laravel or NestJS project. Use `focus` to narrow to a concern: auth, validation, runtime, transaction, isolation, side_effects (queue jobs / mail / notifications / API resources only), all. Framework is auto-detected.",
       inputSchema: {
         project_root: z.string().describe("Absolute path to the project root (Laravel or NestJS)"),
         entrypoint: z.string().describe('Entrypoint in "METHOD /path" format, e.g. "PUT /tasks/{task}"'),
