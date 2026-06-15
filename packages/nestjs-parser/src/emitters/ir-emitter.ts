@@ -56,6 +56,27 @@ function emitGraph(route: NestJSSemanticRoute, globalPipes: boolean): Intermedia
     })
   }
 
+  // Side-effect nodes (ir:queue_job, ir:event_dispatch, ir:mail)
+  for (let i = 0; i < route.sideEffects.length; i++) {
+    const se = route.sideEffects[i]
+    const seId = `se_${i}_${slug(se.symbol)}`
+    nodes.push({
+      id: seId,
+      type: se.type,
+      symbol: se.symbol,
+      role: "side_effect",
+      ...(se.queued !== undefined && {
+        detail: JSON.stringify({ queued: se.queued }),
+      }),
+    })
+    edges.push({
+      from: handlerId,
+      to: seId,
+      relation: "dispatches",
+      traceability: "static",
+    })
+  }
+
   // Guard chain: mw_0 → mw_1 → ... → handler
   const guardNodes = nodes.filter(n => n.id.startsWith("mw_"))
   for (let i = 0; i < guardNodes.length - 1; i++) {

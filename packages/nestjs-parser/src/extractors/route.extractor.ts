@@ -5,6 +5,7 @@ import type { NestJSSemanticRoute } from "../types.js"
 import type { GuardDescriptor } from "../types.js"
 import { extractGuards } from "./guard.extractor.js"
 import { extractDto } from "./dto.extractor.js"
+import { extractSideEffects } from "./side-effect.extractor.js"
 import { scanCustomDecorators } from "../resolvers/decorator.scanner.js"
 import type { CustomDecoratorRegistry } from "../resolvers/decorator.scanner.js"
 
@@ -72,6 +73,7 @@ export function extractRoutes(options: RouteExtractorOptions): NestJSSemanticRou
         const guards = isPublic ? [] : [...controllerGuards, ...methodGuards]
 
         const { dto, validationPipe } = extractDto(method)
+        const sideEffects = extractSideEffects(cls, method)
 
         routes.push({
           method: httpMethod,
@@ -83,6 +85,7 @@ export function extractRoutes(options: RouteExtractorOptions): NestJSSemanticRou
           isPublic,
           validationPipe,
           dto,
+          sideEffects,
         })
       }
     }
