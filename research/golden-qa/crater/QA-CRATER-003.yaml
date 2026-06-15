@@ -1,0 +1,34 @@
+id: QA-CRATER-003
+route: "POST /api/v1/invoices"
+project: crater
+question: "When an invoice is created, is PDF generation done inline (blocking the response) or is it offloaded to a background job?"
+
+expected_finding: queue_job
+expected_severity: LOW
+expected_intent: runtime
+
+expected_evidence_nodes:
+  - symbol: InvoicesController::store
+    type: ir:business_handler
+    role: controller
+  - symbol: GenerateInvoicePdfJob
+    type: ir:queue_job
+    role: side_effect
+
+expected_facts:
+  - { type: job_dispatched, present: true  }
+  - { type: job_sync,       present: false }
+  - { type: auth_gate,      present: true  }
+
+expected_answer_contains:
+  - "GenerateInvoicePdfJob"
+  - "dispatch"
+  - "async"
+
+golden_answer: >
+  PDF generation is offloaded asynchronously. InvoicesController::store calls
+  GenerateInvoicePdfJob::dispatch($invoice) after saving the invoice record, which
+  pushes the job onto the configured queue. The HTTP response returns the new InvoiceResource
+  immediately without waiting for the PDF to be generated. This is correct behaviour —
+  the PDF appears once the queue worker processes the job. The route is protected by
+  auth:sanctum and can:create-invoice.

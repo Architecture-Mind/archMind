@@ -1,0 +1,36 @@
+id: QA-CRATER-002
+route: "GET /api/v1/invoices/{invoice}"
+project: crater
+question: "What data does the invoice show endpoint expose to the caller, and does it include any fields that should not be public?"
+
+expected_finding: sensitive_field_exposed
+expected_severity: MEDIUM
+expected_intent: validation
+
+expected_evidence_nodes:
+  - symbol: InvoicesController::show
+    type: ir:business_handler
+    role: controller
+  - symbol: InvoiceResource::toArray
+    type: ir:api_resource
+    role: response_serializer
+
+expected_facts:
+  - { type: auth_gate,          present: true  }
+  - { type: api_resource,       present: true  }
+  - { type: sensitive_fields,   present: true  }
+
+expected_answer_contains:
+  - "unique_hash"
+  - "InvoiceResource"
+  - "sensitive"
+
+golden_answer: >
+  The endpoint returns an InvoiceResource serialization that includes unique_hash — the
+  magic-link token used to share invoice PDFs without authentication. Exposing unique_hash
+  in the authenticated API response means any API consumer (or XSS payload) that reads
+  the invoice JSON gains the ability to access the PDF without credentials.
+  Additionally creator_id and customer_id (internal surrogate keys) are exposed, which
+  leaks internal object identifiers to clients. The route is protected by auth:sanctum
+  and can:view-invoice, so the exposure is scoped to authenticated users with that
+  permission — but the unique_hash still enables unauthenticated escalation.

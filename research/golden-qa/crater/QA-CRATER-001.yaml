@@ -1,0 +1,34 @@
+id: QA-CRATER-001
+route: "GET /invoices/view/{email_log:token}"
+project: crater
+question: "When a customer opens an invoice PDF link, does sending the viewed notification email block the HTTP response?"
+
+expected_finding: synchronous_mail
+expected_severity: MEDIUM
+expected_intent: runtime
+
+expected_evidence_nodes:
+  - symbol: InvoicePdfController::getPdf
+    type: ir:business_handler
+    role: controller
+  - symbol: InvoiceViewedMail::build
+    type: ir:mail
+    role: side_effect
+
+expected_facts:
+  - { type: mail_send,    present: true  }
+  - { type: mail_queued,  present: false }
+  - { type: auth_gate,    present: false }
+
+expected_answer_contains:
+  - "synchronous"
+  - "Mail::to"
+  - "InvoiceViewedMail"
+
+golden_answer: >
+  Yes. InvoicePdfController::getPdf calls \Mail::to($notificationEmail)->send(new InvoiceViewedMail($data))
+  synchronously, which blocks the HTTP response until the mail is delivered or times out.
+  The mail is not queued — it does not implement ShouldQueue — so every PDF view triggers a
+  synchronous SMTP round-trip. Under slow mail server conditions this will delay or fail the
+  customer's PDF download. The route is magic-link authenticated (no auth middleware) so any
+  link holder triggers this side-effect.

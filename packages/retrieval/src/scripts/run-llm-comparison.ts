@@ -49,6 +49,7 @@ if (existsSync(envPath)) {
 const PROJECT_PATHS: Record<string, string> = {
   "ecomerce-api":          "C:/Users/Admin/Desktop/DuckCode/New folder/laravel/ecomerce-api",
   "laravel-b2b-ecommerce": "C:/Users/Admin/Desktop/DuckCode/New folder/laravel/laravel-b2b-ecommerce",
+  "crater":                join(REPO_ROOT, "research/corpus/crater"),
 }
 
 const projectName = process.argv[2]
@@ -164,14 +165,18 @@ Answer concisely and accurately based on the graph data above.`
 }
 
 const FINDING_DESCRIPTIONS: Record<string, string> = {
-  resource_unprotected:  "resource accessed via route-model-binding has no per-resource ownership check (authentication may still exist)",
-  resource_mismatch:     "authorization check guards a different resource than the one accessed by the handler",
-  missing_authorization: "no authentication or authorization gate on the route",
-  missing_policy:        "controller calls authorize() but the Policy class does not exist",
-  fat_controller:        "controller action injects many services directly — possible SRP violation",
-  exposed_read_endpoint: "GET endpoint with business logic has no authentication",
-  over_authorized_route: "route has many overlapping authorization layers",
-  none:                  "no specific security issue detected",
+  resource_unprotected:    "resource accessed via route-model-binding has no per-resource ownership check (authentication may still exist)",
+  resource_mismatch:       "authorization check guards a different resource than the one accessed by the handler",
+  missing_authorization:   "no authentication or authorization gate on the route",
+  missing_policy:          "controller calls authorize() but the Policy class does not exist",
+  fat_controller:          "controller action injects many services directly — possible SRP violation",
+  exposed_read_endpoint:   "GET endpoint with business logic has no authentication",
+  over_authorized_route:   "route has many overlapping authorization layers",
+  sensitive_field_exposed: "API resource serializer includes fields that should not be public (e.g. internal tokens, surrogate keys)",
+  synchronous_mail:        "mail is sent synchronously inside the request cycle — blocks HTTP response until SMTP completes",
+  api_resource_unprotected:"API resource endpoint has no authentication gate",
+  queue_job:               "a background job is dispatched — PDF/email generation is async and does not block the response",
+  none:                    "no specific security issue detected",
 }
 
 // Max execution path length shown in prompt. Longer paths are truncated.
