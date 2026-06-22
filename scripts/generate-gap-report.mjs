@@ -12,12 +12,35 @@
  * Runtime Coverage Score with breakdown by semantic category.
  */
 
-import { readdirSync, writeFileSync } from "fs"
+import { readdirSync, writeFileSync, existsSync, statSync } from "fs"
 import { join, resolve, dirname } from "path"
-import { fileURLToPath } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, "..")
+
+function distUrl(pkgPath) {
+  return new URL(pkgPath, new URL("../", import.meta.url)).href
+}
+
+function findRouteFiles(projectRoot) {
+  const routesDir = join(projectRoot, "routes")
+  if (!existsSync(routesDir)) return []
+  const found = []
+  for (const entry of readdirSync(routesDir)) {
+    const abs = join(routesDir, entry)
+    const s = statSync(abs)
+    if (s.isFile() && entry.endsWith(".php")) {
+      found.push(abs)
+    } else if (s.isDirectory()) {
+      for (const sub of readdirSync(abs)) {
+        const subAbs = join(abs, sub)
+        if (sub.endsWith(".php") && statSync(subAbs).isFile()) found.push(subAbs)
+      }
+    }
+  }
+  return found
+}
 
 async function main() {
   const [tracesDir, projectRoot] = process.argv.slice(2)
@@ -30,21 +53,37 @@ async function main() {
   const absTracesDir = resolve(tracesDir)
   const absProjectRoot = resolve(projectRoot)
 
-  // Dynamic imports — built packages required
-  const { ingestOtlpFile } = await import(
-    join(ROOT, "packages/runtime-ingest/dist/index.js")
-  )
-  const { correlateSession, generateGapReport } = await import(
-    join(ROOT, "packages/runtime-correlator/dist/index.js")
-  )
-  const { parseProject } = await import(
-    join(ROOT, "packages/laravel-parser/dist/index.js")
+  // Dynamic imports — use distUrl() for Windows ESM compatibility
+  const { ingestOtlpFile } = await import(distUrl("packages/runtime-ingest/dist/index.js"))
+  const { correlateSession, generateGapReport } = await import(distUrl("packages/runtime-correlator/dist/index.js"))
+  const { parseRouteFile, augmentGraph, inferProjectConfig, resolveAliasMap } = await import(
+    distUrl("packages/laravel-parser/dist/index.js")
   )
 
+  // Parse all routes from project
   console.log(`[gap-report] Parsing project: ${absProjectRoot}`)
-  const graphs = await parseProject(absProjectRoot)
-  const allNodes = graphs.flatMap(g => g.nodes)
-  console.log(`[gap-report] Graph nodes: ${allNodes.length} across ${graphs.length} routes`)
+  const config = inferProjectConfig(absProjectRoot)
+  const aliasMap = config ? resolveAliasMap(absProjectRoot, config) : {}
+  const routeFiles = findRouteFiles(absProjectRoot)
+
+  const allNodes = []
+  let routeCount = 0
+  for (const rf of routeFiles) {
+    try {
+      const graphs = parseRouteFile(rf, { aliasMap })
+      for (const g of graphs) {
+        try {
+          const aug = augmentGraph(g, { projectRoot: absProjectRoot, config })
+          allNodes.push(...aug.nodes)
+          routeCount++
+        } catch {
+          allNodes.push(...g.nodes)
+          routeCount++
+        }
+      }
+    } catch {}
+  }
+  console.log(`[gap-report] Graph nodes: ${allNodes.length} across ${routeCount} routes`)
 
   // Load all trace files
   const traceFiles = readdirSync(absTracesDir).filter(f => f.endsWith(".json"))
@@ -63,10 +102,41 @@ async function main() {
 
   for (const file of traceFiles) {
     const session = ingestOtlpFile(join(absTracesDir, file))
-    // Use a synthetic single-graph with all nodes for cross-route correlation
-    const syntheticGraph = { nodes: allNodes, edges: [], routeId: "_all", framework: "laravel" }
-    const correlated = correlateSession(session, syntheticGraph)
-    const report = generateGapReport(correlated)
+
+    // correlateSession's partitionSpans excludes root spans from candidates.
+    // Our middleware emits controller info as standalone root spans.
+    // Manually correlate every span so root controller spans are included.
+    const correlations = session.spans.map(span => {
+      const ns  = span.attributes["code.namespace"]
+      const fn_ = span.attributes["code.function"]
+
+      if (ns && fn_) {
+        // Try namespace+function match (ArticlesController::index)
+        const className = String(ns).split("\\").at(-1)
+        const symbol    = `${className}::${fn_}`
+        const matched   = allNodes.find(n => n.symbol === symbol)
+        if (matched) {
+          return { span, nodeId: matched.id, strategy: "namespace_function", confidence: "exact" }
+        }
+        // Try exact symbol match with FQCN
+        const fqSymbol = `${ns}::${fn_}`
+        const fqMatched = allNodes.find(n => n.symbol === fqSymbol)
+        if (fqMatched) {
+          return { span, nodeId: fqMatched.id, strategy: "exact_symbol", confidence: "exact" }
+        }
+      }
+      return { span, nodeId: null, strategy: "unmatched", confidence: "none" }
+    })
+
+    const matched = correlations.filter(c => c.confidence !== "none").length
+    const syntheticCorrelated = {
+      session,
+      correlations,
+      correlationRate: session.spans.length > 0 ? matched / session.spans.length : 0,
+      infraSpans: [],
+    }
+
+    const report = generateGapReport(syntheticCorrelated)
 
     totalSpans += report.totalSpans
     matchedSpans += report.matchedSpans
