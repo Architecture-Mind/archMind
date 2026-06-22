@@ -1,0 +1,27 @@
+{
+  "generatedAt": "2026-06-22T03:35:42.255Z",
+  "projectRoot": "C:\\Users\\Admin\\Desktop\\DuckCode\\Project\\archMind\\research\\corpus\\laravel-io",
+  "traceFiles": 132,
+  "totalSpans": 132,
+  "matchedSpans": 33,
+  "unmatchedSpans": 99,
+  "coverageScore": 0.25,
+  "breakdown": [
+    {
+      "category": "http_infra",
+      "count": 91,
+      "percentage": 69,
+      "examples": [
+        "GET /"
+      ]
+    },
+    {
+      "category": "unknown",
+      "count": 8,
+      "percentage": 6,
+      "examples": [
+        "Dashboard::__invoke"
+      ]
+    }
+  ]
+}
