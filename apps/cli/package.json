@@ -38,6 +38,8 @@
     "node": ">=18"
   },
   "files": [
-    "dist/index.cjs"
+    "dist/index.cjs",
+    "CHANGELOG.md",
+    "README.md"
   ]
 }
