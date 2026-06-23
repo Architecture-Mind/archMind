@@ -15,6 +15,7 @@ const SEVERITY_PREFIX: Record<string, string> = {
 export function runFindings(flags: Record<string, string>, positional: string[]): void {
   const projectRoot = requireProject(flags)
   const routeFilter = positional[0]
+  const isJson      = "json" in flags
 
   const { graphs } = parseProject(projectRoot)
 
@@ -32,6 +33,11 @@ export function runFindings(flags: Record<string, string>, positional: string[])
     for (const f of findings) {
       allFindings.push({ route: routeKey, finding: f })
     }
+  }
+
+  if (isJson) {
+    console.log(JSON.stringify(allFindings, null, 2))
+    process.exit(allFindings.length > 0 ? 1 : 0)
   }
 
   if (allFindings.length === 0) {

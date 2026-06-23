@@ -19,6 +19,7 @@
     "@archmind/explainer": "*",
     "@archmind/laravel-parser": "*",
     "@archmind/llm-client": "*",
+    "@archmind/nestjs-parser": "*",
     "@archmind/orchestrator": "*",
     "@archmind/protocol": "*",
     "@archmind/retrieval": "*",
