@@ -1,5 +1,5 @@
-import type { IntermediateExecutionGraph, ExecutionNode, ExecutionEdge } from "@archmind/protocol"
-import { IR_VERSION, IR_NODE_TYPES } from "@archmind/protocol"
+import type { IntermediateExecutionGraph, ExecutionNode, ExecutionEdge } from "@kidkender/archmind-protocol"
+import { IR_VERSION, IR_NODE_TYPES } from "@kidkender/archmind-protocol"
 import type { NestJSSemanticRoute } from "../types.js"
 
 const ADAPTER_VERSION = "0.2.0"

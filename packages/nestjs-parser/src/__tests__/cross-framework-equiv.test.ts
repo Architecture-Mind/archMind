@@ -21,7 +21,7 @@ import {
   resolveAliasMap,
 } from "@archmind/laravel-parser"
 import { parseNestJSProject } from "../adapter.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // __dirname = packages/nestjs-parser/src/__tests__

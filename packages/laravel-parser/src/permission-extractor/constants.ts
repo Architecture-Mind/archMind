@@ -1,5 +1,5 @@
-import type { ExecutionNode } from "@archmind/protocol"
-import { IR_NODE_TYPES } from "@archmind/protocol"
+import type { ExecutionNode } from "@kidkender/archmind-protocol"
+import { IR_NODE_TYPES } from "@kidkender/archmind-protocol"
 import type { ConstantMap } from "../constant-resolver.js"
 
 export function extractPermissionNodes(

@@ -6,8 +6,8 @@ import type {
   ExecutionEdge,
   GraphAnnotation,
   ProjectConfig,
-} from "@archmind/protocol"
-import { IR_NODE_TYPES, IR_EDGE_RELATIONS, IR_VERSION } from "@archmind/protocol"
+} from "@kidkender/archmind-protocol"
+import { IR_NODE_TYPES, IR_EDGE_RELATIONS, IR_VERSION } from "@kidkender/archmind-protocol"
 
 const ADAPTER_VERSION = "0.1.0"
 import { parseControllerMethod, parseFormRequestAuthorize, type ServiceCall, type ModelParam, type StandaloneDispatch, type NotificationDispatch } from "./controller-parser.js"

@@ -11,7 +11,7 @@ import { fileURLToPath } from "url"
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from "fs"
 import yaml from "js-yaml"
 import { parseNestJSProject } from "./adapter.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // __dirname = .../packages/nestjs-parser/src  (or dist after build)

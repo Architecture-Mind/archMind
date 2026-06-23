@@ -1,7 +1,7 @@
 import { join, dirname } from "path"
 import { fileURLToPath } from "url"
 import { augmentGraph } from "../graph-augmenter.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname  = dirname(__filename)

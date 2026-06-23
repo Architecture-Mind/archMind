@@ -1,4 +1,4 @@
-import type { ExecutionNode, ExecutionEdge } from "@archmind/protocol"
+import type { ExecutionNode, ExecutionEdge } from "@kidkender/archmind-protocol"
 
 // _ANY suffix convention: TASK_DELETE_ANY is elevated over TASK_DELETE.
 // Edge direction: elevated → basic (mirroring AUTH-002 golden trace).

@@ -1,5 +1,5 @@
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import type { SemanticAdapter } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
+import type { SemanticAdapter } from "@kidkender/archmind-protocol"
 import { extractRoutes } from "./extractors/route.extractor.js"
 import { emitGraphs } from "./emitters/ir-emitter.js"
 import { scanGlobalPipes } from "./resolvers/global.resolver.js"

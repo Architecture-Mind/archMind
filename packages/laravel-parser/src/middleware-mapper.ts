@@ -1,5 +1,5 @@
-import type { ExecutionNode } from "@archmind/protocol"
-import { IR_NODE_TYPES } from "@archmind/protocol"
+import type { ExecutionNode } from "@kidkender/archmind-protocol"
+import { IR_NODE_TYPES } from "@kidkender/archmind-protocol"
 import { DEFAULT_PROJECT_CONFIG, fqcnToPath } from "./project-config.js"
 
 // Maps raw Laravel middleware strings → semantic ExecutionNodes.

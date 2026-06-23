@@ -1,6 +1,6 @@
 import { readFileSync, existsSync, readdirSync, statSync } from "fs"
 import { join, relative, dirname, basename } from "path"
-import type { ProjectConfig } from "@archmind/protocol"
+import type { ProjectConfig } from "@kidkender/archmind-protocol"
 import { parseKernel, type AliasMap } from "./kernel-parser.js"
 import { parseBootstrap } from "./bootstrap-parser.js"
 

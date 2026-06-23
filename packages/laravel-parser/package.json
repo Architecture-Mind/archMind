@@ -1,16 +1,20 @@
 {
-  "name": "@archmind/laravel-parser",
+  "name": "@kidkender/archmind-laravel-parser",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js"
   },
   "dependencies": {
-    "@archmind/protocol": "*",
+    "@kidkender/archmind-protocol": "^0.1.0",
     "tree-sitter": "^0.21.0",
     "tree-sitter-php": "^0.23.0"
   },

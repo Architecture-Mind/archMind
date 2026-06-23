@@ -1,21 +1,24 @@
 {
-  "name": "@archmind/nestjs-parser",
+  "name": "@kidkender/archmind-nestjs-parser",
   "version": "0.2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js"
   },
   "dependencies": {
-    "@archmind/protocol": "*",
+    "@kidkender/archmind-protocol": "^0.1.0",
     "js-yaml": "^4.2.0",
     "ts-morph": "^23.0.0"
   },
   "devDependencies": {
-    "@archmind/laravel-parser": "*",
     "@types/jest": "^29.5.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.0.0",
