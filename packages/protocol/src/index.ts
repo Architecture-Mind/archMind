@@ -1,4 +1,5 @@
 export * from "./graph.js"
+export * from "./validation.js"
 export * from "./evidence.js"
 export * from "./adapter.js"
 export * from "./ir.js"

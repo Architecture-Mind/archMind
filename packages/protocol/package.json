@@ -1,9 +1,21 @@
 {
   "name": "@kidkender/archmind-protocol",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "description": "Shared type vocabulary for the ArchMind ecosystem — IR graph types, validation contracts, runtime correlation types.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": ["dist"],
+  "keywords": ["archmind", "api", "contract", "types", "ir", "protocol", "static-analysis"],
+  "license": "MIT",
+  "homepage": "https://github.com/Architecture-Mind/ArchMind#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Architecture-Mind/ArchMind",
+    "directory": "packages/protocol"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "publishConfig": {
     "access": "public"
   },

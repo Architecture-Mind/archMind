@@ -12,3 +12,4 @@ export { augmentGraph, fqcnToRelativePath, type AugmentOptions, type ExpansionFo
 export { parseKernel, type AliasMap } from "./kernel-parser.js"
 export { loadProjectConfig, inferProjectConfig, DEFAULT_PROJECT_CONFIG, fqcnToPath, resolveAliasMap, expandRouteFiles, expandRouteGlob, flattenRouteIncludes, resolvePolicyFile } from "./project-config.js"
 export { parseBootstrap, type BootstrapParseResult } from "./bootstrap-parser.js"
+export { parseFormRequests, parseFormRequestFile } from "./form-request-parser.js"
