@@ -72,7 +72,7 @@ export function parseProject(projectRoot: string): ParsedProject {
 
   const graphs: IntermediateExecutionGraph[] = []
   for (const relFile of routeFiles) {
-    const skeletons = parseRouteFile(join(projectRoot, relFile), { aliasMap })
+    const skeletons = parseRouteFile(join(projectRoot, relFile), { aliasMap, namespaces: config.namespaces })
     for (const g of skeletons) {
       graphs.push(augmentGraph(g, { projectRoot, config }))
     }

@@ -13,6 +13,7 @@ import { middlewareToNode, resolvedMiddlewareToNode } from "./middleware-mapper.
 import type { ConstantMap } from "./constant-resolver.js"
 import { extractUseMap } from "./controller-parser.js"
 import type { AliasMap } from "./kernel-parser.js"
+import { fqcnToPath } from "./project-config.js"
 
 const _parser = new Parser()
 _parser.setLanguage((PHP as { php?: unknown }).php ?? PHP)
@@ -20,8 +21,9 @@ _parser.setLanguage((PHP as { php?: unknown }).php ?? PHP)
 // ---- Public API -------------------------------------------------------
 
 export interface ParseOptions {
-  constants?: ConstantMap    // pre-resolved PHP class constants
-  aliasMap?:  AliasMap       // Kernel.php alias → FQCN map for alias resolution
+  constants?:  ConstantMap              // pre-resolved PHP class constants
+  aliasMap?:   AliasMap                 // Kernel.php alias → FQCN map for alias resolution
+  namespaces?: Record<string, string>   // PSR-4 namespace → dir map (from composer.json)
   projectRoot?: string
 }
 
@@ -289,7 +291,7 @@ function buildGraph(
   const fqcn = fqcnFromMap
     ?? (controller.includes("\\") ? controller : `App\\Http\\Controllers\\${controller}`)
   const file = fqcn.includes("\\")
-    ? fqcn.replace(/^App\\/, "app/").replace(/\\/g, "/") + ".php"
+    ? (opts.namespaces ? fqcnToPath(fqcn, opts.namespaces) ?? undefined : fqcn.replace(/^App\\/, "app/").replace(/\\/g, "/") + ".php")
     : undefined
 
   const ctrlId = `ctrl_${controller.toLowerCase().replace(/[^a-z0-9]/g, "_")}_${action}`
@@ -464,6 +466,16 @@ function extractControllerAction(node: Parser.SyntaxNode | undefined): {
     const controller = classEl  ? resolveValue(classEl)[0]  ?? "UnknownController" : "UnknownController"
     const action     = actionEl ? resolveValue(actionEl)[0] ?? "unknown"           : "unknown"
     return { controller, action }
+  }
+
+  // Invokable controller: SomeController::class
+  if (node.type === "class_constant_access_expression") {
+    const classNode    = node.children[0]
+    const constantNode = node.children.at(-1)
+    if (constantNode?.text === "class" && classNode) {
+      const controller = resolveValue(classNode)[0] ?? classNode.text
+      return { controller, action: "__invoke" }
+    }
   }
 
   // Laravel ≤8 string syntax: 'ProductsController@index'
