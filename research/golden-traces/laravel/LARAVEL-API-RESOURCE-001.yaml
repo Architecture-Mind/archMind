@@ -1,58 +1,95 @@
 id: LARAVEL-API-RESOURCE-001
-entrypoint: "GET /orders/{order}"
+entrypoint: "GET /v1/invoices/{id}"
 framework: laravel
 source_project: crater
 adapter_version: "0.1.0"
 
 retrieval:
-  query: "What data does the order detail endpoint expose, and does it leak any sensitive fields?"
+  query: "What fields does the invoice detail endpoint expose? Are any sensitive fields included in the response?"
 
 nodes:
-  - id: order_controller_show
-    type: ir:business_handler
-    symbol: OrderController::show
-    file: app/Http/Controllers/OrderController.php
+  - id: sanctum
+    type: ir:auth_gate
+    symbol: auth:sanctum
     retrieval:
       relevance: MEDIUM
       compressible: true
 
-  - id: order_policy_view
-    type: ir:authz_check
-    symbol: OrderPolicy::view
+  - id: company_mw
+    type: ir:auth_gate
+    symbol: company
+    retrieval:
+      relevance: LOW
+      compressible: true
+
+  - id: bouncer_mw
+    type: ir:auth_gate
+    symbol: bouncer
+    retrieval:
+      relevance: LOW
+      compressible: true
+
+  - id: invoices_controller_show
+    type: ir:business_handler
+    symbol: InvoicesController::show
+    file: app/Http/Controllers/V1/Admin/Invoice/InvoicesController.php
     retrieval:
       relevance: HIGH
       compressible: false
 
-  - id: order_resource
+  - id: invoice_resource
     type: ir:api_resource
-    symbol: OrderResource::toArray
-    file: app/Http/Resources/OrderResource.php
+    symbol: InvoiceResource::toArray
+    file: app/Http/Resources/InvoiceResource.php
     retrieval:
       relevance: HIGH
       compressible: false
     detail:
-      fields: [id, status, total, created_at, token]
-      sensitiveFields: [token]
-      conditionalFields: [token]
+      fields:
+        - id
+        - invoice_date
+        - due_date
+        - invoice_number
+        - reference_number
+        - status
+        - paid_status
+        - notes
+        - discount
+        - sub_total
+        - total
+        - tax
+        - due_amount
+        - unique_hash
+        - invoice_pdf_url
+        - customer_id
+        - creator_id
+        - items
+        - customer
+        - creator
+        - taxes
+        - company
+        - currency
+      sensitiveFields: []
       isCollection: false
 
 edges:
-  - from: order_controller_show
-    to: order_policy_view
-    relation: policy_check
-    via: "$this->authorize('view', $order)"
-
-  - from: order_controller_show
-    to: order_resource
+  - from: invoices_controller_show
+    to: invoice_resource
     relation: ir:returns
 
 expected_findings:
   - type: sensitive_field_exposed
-    required_nodes: [order_resource]
+    required_nodes: [invoice_resource]
+    notes: >
+      unique_hash is a PDF access token used in unauthenticated URL
+      /invoices/pdf/{invoice:unique_hash}. Exposing it in the API response
+      grants any caller with a valid session unauthenticated PDF access.
 
 annotations:
-  - type: sensitive_field_exposure
-    nodes: [order_resource]
+  - type: data_exposure
+    nodes: [invoice_resource]
     description: >
-      'token' field is conditionally included via $this->when().
-      Static analysis cannot confirm the guard condition is always safe.
+      unique_hash functions as an access token for unauthenticated PDF download
+      routes (/invoices/pdf/{invoice:unique_hash}). invoice_pdf_url exposes a
+      pre-signed URL. Both should be treated as sensitive but are not caught by
+      the current SENSITIVE_PATTERNS heuristic.
