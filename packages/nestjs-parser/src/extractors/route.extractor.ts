@@ -6,6 +6,7 @@ import type { GuardDescriptor } from "../types.js"
 import { extractGuards } from "./guard.extractor.js"
 import { extractDto } from "./dto.extractor.js"
 import { extractSideEffects } from "./side-effect.extractor.js"
+import { extractServiceCalls } from "./service-call.extractor.js"
 import { scanCustomDecorators } from "../resolvers/decorator.scanner.js"
 import type { CustomDecoratorRegistry } from "../resolvers/decorator.scanner.js"
 
@@ -73,7 +74,9 @@ export function extractRoutes(options: RouteExtractorOptions): NestJSSemanticRou
         const guards = isPublic ? [] : [...controllerGuards, ...methodGuards]
 
         const { dto, validationPipe } = extractDto(method)
-        const sideEffects = extractSideEffects(cls, method)
+        const sideEffects  = extractSideEffects(cls, method)
+        let serviceCalls: ReturnType<typeof extractServiceCalls> = []
+        try { serviceCalls = extractServiceCalls(cls, method) } catch { /* skip on parse error */ }
 
         routes.push({
           method: httpMethod,
@@ -86,6 +89,7 @@ export function extractRoutes(options: RouteExtractorOptions): NestJSSemanticRou
           validationPipe,
           dto,
           sideEffects,
+          serviceCalls,
         })
       }
     }

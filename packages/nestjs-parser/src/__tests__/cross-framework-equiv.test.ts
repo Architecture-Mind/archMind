@@ -191,3 +191,68 @@ describe("Cross-framework: auth + validation pattern", () => {
     expect(full(nestjsTypes)).toBe(true)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Pattern 4: Auth + Service Call
+//   Laravel:  middleware('auth:sanctum') + $this->taskService->findById($id)
+//   NestJS:   @UseGuards(JwtAuthGuard) + this.taskService.findById(id)
+//
+//   Expected IR: both must contain auth_gate + service_call + business_handler
+// ---------------------------------------------------------------------------
+
+describe("Cross-framework: auth + service call pattern", () => {
+  let laravelGraphs: IntermediateExecutionGraph[]
+  let nestjsGraphs:  IntermediateExecutionGraph[]
+  let laravelTypes: Set<string>
+  let nestjsTypes:  Set<string>
+
+  beforeAll(() => {
+    laravelGraphs = laravelGraphsFor("auth-service-call")
+    nestjsGraphs  = nestjsGraphsFor("auth-service-call")
+    expect(laravelGraphs).toHaveLength(1)
+    expect(nestjsGraphs).toHaveLength(1)
+    laravelTypes = irNodeTypes(laravelGraphs[0])
+    nestjsTypes  = irNodeTypes(nestjsGraphs[0])
+  })
+
+  test("Laravel graph has ir:auth_gate", () => {
+    expect(laravelTypes.has("ir:auth_gate")).toBe(true)
+  })
+
+  test("NestJS graph has ir:auth_gate", () => {
+    expect(nestjsTypes.has("ir:auth_gate")).toBe(true)
+  })
+
+  test("Laravel graph has ir:service_call", () => {
+    expect(laravelTypes.has("ir:service_call")).toBe(true)
+  })
+
+  test("NestJS graph has ir:service_call", () => {
+    expect(nestjsTypes.has("ir:service_call")).toBe(true)
+  })
+
+  test("NestJS ir:service_call symbol contains TaskService::findById", () => {
+    const scNode = nestjsGraphs[0].nodes.find(
+      n => n.type === "ir:service_call" && n.symbol.includes("TaskService")
+    )
+    expect(scNode).toBeDefined()
+    expect(scNode?.symbol).toBe("TaskService::findById")
+  })
+
+  test("NestJS calls edge from handler to service_call", () => {
+    const handler = nestjsGraphs[0].nodes.find(n => n.type === "ir:business_handler")
+    const svc     = nestjsGraphs[0].nodes.find(n => n.type === "ir:service_call")
+    const edge    = nestjsGraphs[0].edges.find(
+      e => e.from === handler?.id && e.to === svc?.id && e.relation === "calls"
+    )
+    expect(edge).toBeDefined()
+    expect(edge?.traceability).toBe("semantic")
+  })
+
+  test("EQUIVALENCE: both have auth_gate + service_call + business_handler", () => {
+    const full = (t: Set<string>) =>
+      t.has("ir:auth_gate") && t.has("ir:service_call") && t.has("ir:business_handler")
+    expect(full(laravelTypes)).toBe(true)
+    expect(full(nestjsTypes)).toBe(true)
+  })
+})

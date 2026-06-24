@@ -77,6 +77,24 @@ function emitGraph(route: NestJSSemanticRoute, globalPipes: boolean): Intermedia
     })
   }
 
+  // Service call nodes (ir:service_call)
+  for (let i = 0; i < (route.serviceCalls?.length ?? 0); i++) {
+    const sc = route.serviceCalls[i]
+    const scId = `svc_${slug(sc.serviceClass)}_${slug(sc.method)}_${handlerId}`
+    nodes.push({
+      id: scId,
+      type: "ir:service_call",
+      symbol: sc.symbol,
+      role: "service",
+    })
+    edges.push({
+      from: handlerId,
+      to: scId,
+      relation: "calls",
+      traceability: "semantic",
+    })
+  }
+
   // Guard chain: mw_0 → mw_1 → ... → handler
   const guardNodes = nodes.filter(n => n.id.startsWith("mw_"))
   for (let i = 0; i < guardNodes.length - 1; i++) {
