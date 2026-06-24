@@ -125,6 +125,8 @@ export function parseControllerMethod(
     if (!privateMethod) continue
     authorizeCalls.push(...extractAuthorizeCalls(privateMethod, modelParams))
     serviceCalls.push(...extractServiceCalls(privateMethod, allInjections, useMap))
+    standaloneDispatches.push(...extractStandaloneDispatches(privateMethod, useMap))
+    standaloneNotifications.push(...extractNotificationDispatches(privateMethod, useMap))
   }
 
   // Deduplicate service calls by propertyName+method (same call site from two
@@ -540,7 +542,7 @@ function gatherStandaloneDispatches(
       const clsText = cls?.text.replace(/^\\/, "") ?? ""
       if (clsText && clsText !== "DB" && clsText !== "Bus") {
         const fqcn = useMap.get(clsText) ?? clsText
-        results.push({ className: clsText, fqcn, kind: classifyDispatch(clsText), callText: node.text })
+        results.push({ className: clsText, fqcn, kind: classifyDispatch(fqcn), callText: node.text })
         return
       }
     }
@@ -585,12 +587,22 @@ function firstArgClassName(
   for (const arg of argsNode.children as Parser.SyntaxNode[]) {
     if (arg.type !== "argument") continue
     const val = arg.firstNamedChild
+    // new ClassName(...) — most common
     if (val?.type === "object_creation_expression") {
       const clsNode = val.childForFieldName("class") ?? val.namedChildren[0]
       const clsText = clsNode?.text.replace(/^\\/, "") ?? ""
       if (!clsText) continue
       const fqcn = useMap.get(clsText) ?? clsText
-      return { className: clsText, fqcn, kind: classifyDispatch(clsText), callText: callNode.text }
+      return { className: clsText, fqcn, kind: classifyDispatch(fqcn), callText: callNode.text }
+    }
+    // ClassName::staticFactory(...) — e.g. RegisterUser::fromRequest($req)
+    if (val?.type === "scoped_call_expression") {
+      const scope   = (val.children as Parser.SyntaxNode[])[0]
+      const clsText = scope?.text.replace(/^\\/, "") ?? ""
+      if (clsText && clsText !== "DB" && clsText !== "Bus") {
+        const fqcn = useMap.get(clsText) ?? clsText
+        return { className: clsText, fqcn, kind: classifyDispatch(fqcn), callText: callNode.text }
+      }
     }
   }
   return null

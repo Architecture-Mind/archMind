@@ -171,8 +171,13 @@ function gatherDispatchesAndWrites(
 
 // ---- Helpers ----------------------------------------------------------
 
-export function classifyDispatch(className: string): "event" | "job" | "unknown" {
-  const name = className.split("\\").pop() ?? className
+export function classifyDispatch(fqcnOrShort: string): "event" | "job" | "unknown" {
+  const parts = fqcnOrShort.split("\\")
+  const name  = parts[parts.length - 1] ?? fqcnOrShort
+  // Namespace-based classification is most reliable when FQCN is available
+  if (parts.includes("Jobs"))   return "job"
+  if (parts.includes("Events")) return "event"
+  // Name-based heuristics for short names or unconventional namespaces
   if (/Event|Was[A-Z]|Created|Updated|Deleted|Fired|Dispatched/.test(name)) return "event"
   if (/Job|Process|Send|Queue|Handle/.test(name)) return "job"
   return "unknown"
