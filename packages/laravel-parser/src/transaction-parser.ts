@@ -173,7 +173,7 @@ function gatherDispatchesAndWrites(
 
 export function classifyDispatch(className: string): "event" | "job" | "unknown" {
   const name = className.split("\\").pop() ?? className
-  if (/Event|Created|Updated|Deleted|Fired|Dispatched/.test(name)) return "event"
+  if (/Event|Was[A-Z]|Created|Updated|Deleted|Fired|Dispatched/.test(name)) return "event"
   if (/Job|Process|Send|Queue|Handle/.test(name)) return "job"
   return "unknown"
 }

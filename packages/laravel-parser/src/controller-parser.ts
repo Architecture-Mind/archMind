@@ -506,6 +506,8 @@ function collectMiddlewareCalls(node: Parser.SyntaxNode, results: ConstructorMid
 
 // ---- Standalone dispatch extraction (18B.2) --------------------------
 
+const THIS_DISPATCH_METHODS = new Set(["dispatch", "dispatchSync", "dispatchNow", "dispatchAfterResponse"])
+
 /**
  * Detect Job::dispatch() / event(new Event()) / dispatch(new Job()) calls
  * in a method body, EXCLUDING those inside DB::transaction() closures
@@ -539,6 +541,19 @@ function gatherStandaloneDispatches(
       if (clsText && clsText !== "DB" && clsText !== "Bus") {
         const fqcn = useMap.get(clsText) ?? clsText
         results.push({ className: clsText, fqcn, kind: classifyDispatch(clsText), callText: node.text })
+        return
+      }
+    }
+  }
+
+  // $this->dispatch(new Job()) / $this->dispatchSync() / $this->dispatchNow() — DispatchesJobs trait
+  if (node.type === "member_call_expression") {
+    const obj  = node.childForFieldName("object")
+    const name = node.childForFieldName("name")
+    if (obj?.text === "$this" && name && THIS_DISPATCH_METHODS.has(name.text)) {
+      const arg = firstArgClassName(node, useMap)
+      if (arg) {
+        results.push(arg)
         return
       }
     }

@@ -14,12 +14,19 @@ export interface ResourceField {
   isSensitive: boolean       // heuristic: key contains "secret|token|password|internal|admin"
 }
 
+export interface NestedResourceRef {
+  shortName:    string   // e.g. "TagResource"
+  fqcn:         string   // e.g. "App\Http\Resources\TagResource"
+  isCollection: boolean  // true for ::collection() call
+}
+
 export interface ApiResourceInfo {
   className:  string         // e.g. "UserResource"
   fqcn:       string         // e.g. "App\Http\Resources\UserResource"
   fields:     ResourceField[]
   isCollection: boolean      // true if it extends ResourceCollection
   conditionalFields: string[] // fields wrapped in $this->when(...)
+  nestedResources: NestedResourceRef[] // resources returned from toArray() values
 }
 
 const SENSITIVE_PATTERNS = /secret|token|password|passwd|internal|admin_|_admin|private|api_key/i
@@ -41,11 +48,13 @@ export function parseApiResource(filePath: string): ApiResourceInfo | null {
   const root = tree.rootNode
   const className   = extractClassName(root)
   const fqcn        = buildFqcn(root, className)
+  const useMap      = extractResourceUseMap(root)
   const isCollection = checkIsCollection(source)
   const fields      = extractToArrayFields(root)
   const conditionalFields = extractConditionalFields(root)
+  const nestedResources   = extractNestedResourceRefs(root, useMap)
 
-  return { className, fqcn, fields, isCollection, conditionalFields }
+  return { className, fqcn, fields, isCollection, conditionalFields, nestedResources }
 }
 
 /**
@@ -237,4 +246,88 @@ function* walkNodes(node: Parser.SyntaxNode): Generator<Parser.SyntaxNode> {
 function resolveString(node: Parser.SyntaxNode): string {
   const content = node.children.find(c => c.type === "string_content")
   return content?.text ?? node.text.slice(1, -1)
+}
+
+// ─── Use-map for resource files ───────────────────────────────────────────────
+
+function extractResourceUseMap(root: Parser.SyntaxNode): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const node of walkNodes(root)) {
+    if (node.type !== "namespace_use_declaration") continue
+    const group  = node.children.find(c => c.type === "namespace_use_group")
+    const prefix = node.children.find(c => c.type === "namespace_name")?.text ?? ""
+    if (group) {
+      for (const clause of group.children) {
+        if (clause.type === "namespace_use_clause") registerClause(clause, prefix, map)
+      }
+    } else {
+      for (const clause of node.children) {
+        if (clause.type === "namespace_use_clause") registerClause(clause, "", map)
+      }
+    }
+  }
+  return map
+}
+
+function registerClause(clause: Parser.SyntaxNode, prefix: string, map: Map<string, string>): void {
+  const qualName = clause.children.find(c => c.type === "qualified_name" || c.type === "name")
+  if (!qualName) return
+  const raw  = qualName.text.trim()
+  const fqcn = prefix ? `${prefix}\\${raw}` : raw
+  const short = fqcn.split("\\").pop() ?? fqcn
+  map.set(short, fqcn)
+}
+
+// ─── Nested resource detection ────────────────────────────────────────────────
+
+/**
+ * Scan toArray() body for nested resource instantiations:
+ *   - new XResource($model)                        — direct array value
+ *   - XResource::collection($models)               — direct array value
+ *   - $this->when(..., fn() => new XResource())    — inside when() closures
+ */
+export function extractNestedResourceRefs(
+  root: Parser.SyntaxNode,
+  useMap: Map<string, string>
+): NestedResourceRef[] {
+  const methodNode = findMethodNode(root, "toArray")
+  if (!methodNode) return []
+  const body = methodNode.childForFieldName("body")
+  if (!body) return []
+
+  const refs: NestedResourceRef[] = []
+  const seen = new Set<string>()
+
+  for (const node of walkNodes(body)) {
+    // new XResource(...) — object_creation_expression
+    if (node.type === "object_creation_expression") {
+      const clsNode = node.childForFieldName("class_name") ?? node.namedChildren[0]
+      if (clsNode) {
+        const short = clsNode.text.trim()
+        if (isResourceName(short) && !seen.has(short)) {
+          seen.add(short)
+          refs.push({ shortName: short, fqcn: useMap.get(short) ?? short, isCollection: false })
+        }
+      }
+    }
+
+    // XResource::collection(...) or XResource::make(...) — scoped_call_expression
+    if (node.type === "scoped_call_expression") {
+      const scope  = node.childForFieldName("scope")
+      const method = node.childForFieldName("name")
+      if (scope && (method?.text === "collection" || method?.text === "make")) {
+        const short = scope.text.trim()
+        if (isResourceName(short) && !seen.has(short)) {
+          seen.add(short)
+          refs.push({ shortName: short, fqcn: useMap.get(short) ?? short, isCollection: method.text === "collection" })
+        }
+      }
+    }
+  }
+
+  return refs
+}
+
+function isResourceName(name: string): boolean {
+  return (name.endsWith("Resource") || name.endsWith("Collection")) && name !== "JsonResource" && name !== "ResourceCollection"
 }

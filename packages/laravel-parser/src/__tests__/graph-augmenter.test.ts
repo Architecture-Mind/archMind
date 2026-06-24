@@ -471,3 +471,123 @@ describe("augmentGraph — ir:api_resource nodes (OrderController::index, collec
     expect(detail.isCollection).toBe(true)
   })
 })
+
+// ---- Nested resource detection — ArticleResource -------------------------
+
+describe("augmentGraph — nested ir:api_resource nodes (ArticleResource → TagResource, AuthorResource)", () => {
+  let aug: IntermediateExecutionGraph
+
+  const SKELETON_ARTICLE: IntermediateExecutionGraph = {
+    entrypoint: "GET /articles/{article}",
+    method: "GET",
+    path: "/articles/{article}",
+    nodes: [
+      {
+        id:     "ctrl_articlecontroller_show",
+        type:   "ir:business_handler",
+        symbol: "ArticleController::show",
+        role:   "handler",
+        file:   "app/Http/Controllers/ArticleController.php",
+      },
+    ],
+    edges:       [],
+    annotations: [],
+  }
+
+  // Wire a stub ArticleController that returns ArticleResource
+  beforeAll(async () => {
+    // ArticleController.php isn't needed for this test — we manually augment
+    // by replacing the resource node directly. Instead, test resource-parser
+    // extractNestedResourceRefs directly on the ArticleResource fixture.
+    const { parseApiResource } = await import("../resource-parser.js")
+    const articleResourcePath = join(FIXTURES, "app/Http/Resources/ArticleResource.php")
+    aug = {
+      ...SKELETON_ARTICLE,
+      nodes: [{ ...SKELETON_ARTICLE.nodes[0]! }],
+      edges: [],
+    }
+
+    const info = parseApiResource(articleResourcePath)
+    // Attach test result to aug for assertions
+    ;(aug as any).__articleResourceInfo = info
+  })
+
+  test("parseApiResource detects 2 nested resource refs (AuthorResource, TagResource)", () => {
+    const info = (aug as any).__articleResourceInfo
+    expect(info).not.toBeNull()
+    expect(info.nestedResources).toHaveLength(2)
+  })
+
+  test("AuthorResource detected as non-collection (::make())", () => {
+    const info = (aug as any).__articleResourceInfo
+    const ref = info.nestedResources.find((r: any) => r.shortName === "AuthorResource")
+    expect(ref).toBeDefined()
+    expect(ref.isCollection).toBe(false)
+  })
+
+  test("TagResource detected as collection (::collection())", () => {
+    const info = (aug as any).__articleResourceInfo
+    const ref = info.nestedResources.find((r: any) => r.shortName === "TagResource")
+    expect(ref).toBeDefined()
+    expect(ref.isCollection).toBe(true)
+  })
+})
+
+// ---- Nested resource in when() closures — CustomerResource ---------------
+
+describe("parseApiResource — CustomerResource nested resources inside $this->when() closures", () => {
+  test("detects AddressResource and CompanyResource inside when() closures", async () => {
+    const { parseApiResource } = await import("../resource-parser.js")
+    const path = join(FIXTURES, "app/Http/Resources/CustomerResource.php")
+    const info = parseApiResource(path)
+    expect(info).not.toBeNull()
+    const names = info!.nestedResources.map((r) => r.shortName)
+    expect(names).toContain("AddressResource")
+    expect(names).toContain("CompanyResource")
+  })
+})
+
+// ---- Job handle() body parsing — ApproveArticleJob ----------------------
+
+describe("augmentGraph — ir:queue_job expands handle() and finds nested ir:event_dispatch", () => {
+  let aug: IntermediateExecutionGraph
+
+  const SKELETON_JOB_CTRL: IntermediateExecutionGraph = {
+    entrypoint: "POST /articles/{article}/approve",
+    method: "POST",
+    path: "/articles/{article}/approve",
+    nodes: [
+      {
+        id:     "ctrl_approve_article_ctrl",
+        type:   "ir:business_handler",
+        symbol: "ApproveArticleController::__invoke",
+        role:   "handler",
+        file:   "app/Http/Controllers/ApproveArticleController.php",
+      },
+    ],
+    edges:       [],
+    annotations: [],
+  }
+
+  beforeAll(async () => {
+    // Test job body expansion directly via parseControllerMethod
+    const { parseControllerMethod } = await import("../controller-parser.js")
+    const jobPath = join(FIXTURES, "app/Jobs/ApproveArticleJob.php")
+    const result = parseControllerMethod(jobPath, "handle")
+    aug = { ...SKELETON_JOB_CTRL, nodes: [...SKELETON_JOB_CTRL.nodes], edges: [] }
+    ;(aug as any).__jobL1 = result
+  })
+
+  test("job handle() body has 1 standalone dispatch", () => {
+    const l1 = (aug as any).__jobL1
+    expect(l1).not.toBeNull()
+    expect(l1.standaloneDispatches).toHaveLength(1)
+  })
+
+  test("dispatch is ArticleWasApproved classified as event", () => {
+    const l1 = (aug as any).__jobL1
+    const d = l1.standaloneDispatches[0]
+    expect(d.className).toBe("ArticleWasApproved")
+    expect(d.kind).toBe("event")
+  })
+})

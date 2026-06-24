@@ -20,7 +20,7 @@ import { buildHierarchyEdges } from "./permission-extractor/hierarchy.js"
 import { parseTransactions } from "./transaction-parser.js"
 import { parseIsolation } from "./isolation-parser.js"
 import { DEFAULT_PROJECT_CONFIG, fqcnToPath, resolvePolicyFile } from "./project-config.js"
-import { parseApiResource } from "./resource-parser.js"
+import { parseApiResource, type NestedResourceRef } from "./resource-parser.js"
 
 // ---- Public API -------------------------------------------------------
 
@@ -756,7 +756,8 @@ function emitStandaloneDispatchNodes(
   ctrlNode: ExecutionNode,
   dispatches: StandaloneDispatch[],
   projectRoot: string,
-  namespaces: Record<string, string>
+  namespaces: Record<string, string>,
+  expandJobBodies = true
 ): void {
   if (dispatches.length === 0) return
 
@@ -775,19 +776,25 @@ function emitStandaloneDispatchNodes(
       seen.add(id)
 
       const file = d.fqcn.includes("\\") ? (fqcnToPath(d.fqcn, namespaces) ?? undefined) : undefined
-      nodes.push({
+      const jobNode: ExecutionNode = {
         id,
         type:   IR_NODE_TYPES.QUEUE_JOB,
         symbol: `${d.className}::dispatch`,
         role:   "async_execution",
         ...(file ? { file } : {}),
-      })
+      }
+      nodes.push(jobNode)
       edges.push({
         from:         ctrlNode.id,
         to:           id,
         relation:     IR_EDGE_RELATIONS.DISPATCHES,
         traceability: "static",
       })
+
+      // Parse job's handle() body for nested dispatches (depth-1)
+      if (expandJobBodies) {
+        expandJobBody(nodes, edges, jobNode, projectRoot, namespaces)
+      }
 
     } else if (d.kind === "event") {
       const id = `evt_${slug}_${ctrlNode.id}`
@@ -831,6 +838,71 @@ function emitStandaloneDispatchNodes(
   }
 }
 
+// ─── Job handle() body parsing (depth-1) ─────────────────────────────────────
+
+/**
+ * Parse a Job class's handle() method and emit any nested dispatches or
+ * notifications as child nodes of the job node. Limited to depth 1 to
+ * prevent runaway recursion across job chains.
+ */
+function expandJobBody(
+  nodes: ExecutionNode[],
+  edges: ExecutionEdge[],
+  jobNode: ExecutionNode,
+  projectRoot: string,
+  namespaces: Record<string, string>
+): void {
+  if (!jobNode.file) return
+  const filePath = join(projectRoot, jobNode.file)
+
+  let l1: ReturnType<typeof parseControllerMethod>
+  try {
+    l1 = parseControllerMethod(filePath, "handle")
+  } catch {
+    return
+  }
+  if (!l1) return
+
+  const seen = new Set<string>()
+
+  // Nested job dispatches from handle()
+  for (const d of l1.standaloneDispatches) {
+    const slug = d.className.toLowerCase().replace(/[^a-z0-9]/g, "_")
+
+    if (d.kind === "job") {
+      const id = `job_${slug}_${jobNode.id}`
+      if (seen.has(id) || nodes.some(n => n.id === id)) continue
+      seen.add(id)
+      const file = d.fqcn.includes("\\") ? (fqcnToPath(d.fqcn, namespaces) ?? undefined) : undefined
+      nodes.push({ id, type: IR_NODE_TYPES.QUEUE_JOB, symbol: `${d.className}::dispatch`, role: "async_execution", ...(file ? { file } : {}) })
+      edges.push({ from: jobNode.id, to: id, relation: IR_EDGE_RELATIONS.DISPATCHES, traceability: "static" })
+
+    } else if (d.kind === "event") {
+      const id = `evt_${slug}_${jobNode.id}`
+      if (seen.has(id) || nodes.some(n => n.id === id)) continue
+      seen.add(id)
+      nodes.push({ id, type: IR_NODE_TYPES.EVENT_DISPATCH, symbol: `${d.className}::dispatch`, role: "event_emission" })
+      edges.push({ from: jobNode.id, to: id, relation: IR_EDGE_RELATIONS.DISPATCHES, traceability: "static" })
+    }
+  }
+
+  // Nested notifications/mail from handle()
+  for (const n of l1.standaloneNotifications) {
+    const slug = n.className.toLowerCase().replace(/[^a-z0-9]/g, "_")
+    const id   = n.kind === "notification" ? `notif_${slug}_${jobNode.id}` : `mail_${slug}_${jobNode.id}`
+    if (seen.has(id) || nodes.some(nd => nd.id === id)) continue
+    seen.add(id)
+    nodes.push({
+      id,
+      type:   n.kind === "notification" ? IR_NODE_TYPES.NOTIFICATION : IR_NODE_TYPES.MAIL,
+      symbol: `${n.className}::${n.kind === "mail" ? "build" : "via"}`,
+      role:   "side_effect",
+      detail: JSON.stringify({ className: n.className, queued: n.queued }),
+    })
+    edges.push({ from: jobNode.id, to: id, relation: IR_EDGE_RELATIONS.SENDS, traceability: "static" })
+  }
+}
+
 // ─── API Resource nodes (IR v1.2) ────────────────────────────────────────────
 
 function emitApiResourceNodes(
@@ -853,11 +925,12 @@ function emitApiResourceNodes(
     const resourceFile = fqcnToPath(rr.fqcn, config.namespaces) ?? undefined
     const resourcePath = resourceFile ? join(projectRoot, resourceFile) : undefined
 
-    // Parse toArray() to get field list
+    // Parse toArray() to get field list and nested resource refs
     let fields: string[] = []
     let sensitiveFields: string[] = []
     let conditionalFields: string[] = []
     let isCollection = rr.isCollection
+    let nestedResources: NestedResourceRef[] = []
 
     if (resourcePath && existsSync(resourcePath)) {
       const info = parseApiResource(resourcePath)
@@ -866,6 +939,7 @@ function emitApiResourceNodes(
         sensitiveFields   = info.fields.filter(f => f.isSensitive).map(f => f.key)
         conditionalFields = info.conditionalFields
         isCollection      = isCollection || info.isCollection
+        nestedResources   = info.nestedResources
       }
     }
 
@@ -883,6 +957,66 @@ function emitApiResourceNodes(
       from:         ctrlNode.id,
       to:           id,
       relation:     "ir:returns",
+      traceability: "static",
+    })
+
+    // Emit nested resource nodes (depth-1 only to prevent cycles)
+    emitNestedResourceNodes(nodes, edges, node, nestedResources, projectRoot, config)
+  }
+}
+
+/**
+ * Emit ir:api_resource child nodes for resources nested inside a parent resource's toArray().
+ * Depth-1 only — we do not recurse further to prevent cycles in resource graphs.
+ */
+function emitNestedResourceNodes(
+  nodes: ExecutionNode[],
+  edges: ExecutionEdge[],
+  parentNode: ExecutionNode,
+  nestedRefs: NestedResourceRef[],
+  projectRoot: string,
+  config: ProjectConfig,
+): void {
+  const seen = new Set<string>()
+
+  for (const nr of nestedRefs) {
+    if (seen.has(nr.fqcn)) continue
+    seen.add(nr.fqcn)
+
+    const id = `api_res_${nr.shortName.toLowerCase().replace(/[^a-z0-9]/g, "_")}_${parentNode.id}`
+    if (nodes.some(n => n.id === id)) continue
+
+    const resourceFile = fqcnToPath(nr.fqcn, config.namespaces) ?? undefined
+    const resourcePath = resourceFile ? join(projectRoot, resourceFile) : undefined
+
+    let fields: string[] = []
+    let sensitiveFields: string[] = []
+    let conditionalFields: string[] = []
+    let isCollection = nr.isCollection
+
+    if (resourcePath && existsSync(resourcePath)) {
+      const info = parseApiResource(resourcePath)
+      if (info) {
+        fields            = info.fields.map(f => f.key)
+        sensitiveFields   = info.fields.filter(f => f.isSensitive).map(f => f.key)
+        conditionalFields = info.conditionalFields
+        isCollection      = isCollection || info.isCollection
+      }
+    }
+
+    nodes.push({
+      id,
+      type:   "ir:api_resource",
+      symbol: `${nr.shortName}::toArray`,
+      role:   "response_shape",
+      file:   resourceFile,
+      ...(fields.length > 0 ? { detail: JSON.stringify({ fields, sensitiveFields, conditionalFields, isCollection }) } : {}),
+    })
+
+    edges.push({
+      from:         parentNode.id,
+      to:           id,
+      relation:     "ir:includes",
       traceability: "static",
     })
   }

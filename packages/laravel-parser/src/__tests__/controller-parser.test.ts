@@ -344,3 +344,43 @@ describe("parseControllerMethod — NotificationController::notify standaloneNot
     expect(d!.queued).toBe(true)
   })
 })
+
+// ---- $this->dispatch() / dispatchSync() — ThisDispatchController --------
+
+const THIS_CTRL = join(FIXTURES, "app/Http/Controllers/ThisDispatchController.php")
+
+describe("parseControllerMethod — ThisDispatchController::store $this->dispatch()", () => {
+  let result: ReturnType<typeof parseControllerMethod>
+
+  beforeAll(() => {
+    result = parseControllerMethod(THIS_CTRL, "store")
+  })
+
+  test("detects 1 standalone dispatch via $this->dispatch()", () => {
+    expect(result!.standaloneDispatches).toHaveLength(1)
+  })
+
+  test("ProcessReportJob classified as job", () => {
+    const d = result!.standaloneDispatches.find((d) => d.className === "ProcessReportJob")
+    expect(d).toBeDefined()
+    expect(d!.kind).toBe("job")
+  })
+})
+
+describe("parseControllerMethod — ThisDispatchController::register $this->dispatchSync()", () => {
+  let result: ReturnType<typeof parseControllerMethod>
+
+  beforeAll(() => {
+    result = parseControllerMethod(THIS_CTRL, "register")
+  })
+
+  test("detects 1 dispatch via $this->dispatchSync()", () => {
+    expect(result!.standaloneDispatches).toHaveLength(1)
+  })
+
+  test("RegisterUserJob classified as job", () => {
+    const d = result!.standaloneDispatches.find((d) => d.className === "RegisterUserJob")
+    expect(d).toBeDefined()
+    expect(d!.kind).toBe("job")
+  })
+})
