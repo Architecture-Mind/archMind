@@ -69,7 +69,8 @@ nodes:
         - taxes
         - company
         - currency
-      sensitiveFields: []
+      sensitiveFields:
+        - unique_hash
       isCollection: false
 
 edges:
@@ -84,6 +85,7 @@ expected_findings:
       unique_hash is a PDF access token used in unauthenticated URL
       /invoices/pdf/{invoice:unique_hash}. Exposing it in the API response
       grants any caller with a valid session unauthenticated PDF access.
+      Detected by _hash suffix pattern in SENSITIVE_PATTERNS.
 
 annotations:
   - type: data_exposure
@@ -91,5 +93,5 @@ annotations:
     description: >
       unique_hash functions as an access token for unauthenticated PDF download
       routes (/invoices/pdf/{invoice:unique_hash}). invoice_pdf_url exposes a
-      pre-signed URL. Both should be treated as sensitive but are not caught by
-      the current SENSITIVE_PATTERNS heuristic.
+      pre-signed URL. unique_hash is caught by the _hash suffix pattern added
+      to SENSITIVE_PATTERNS in Phase 21.

@@ -29,7 +29,7 @@ export interface ApiResourceInfo {
   nestedResources: NestedResourceRef[] // resources returned from toArray() values
 }
 
-const SENSITIVE_PATTERNS = /secret|token|password|passwd|internal|admin_|_admin|private|api_key/i
+const SENSITIVE_PATTERNS = /secret|token|password|passwd|internal|admin_|_admin|private|api_key|_hash|hash_/i
 
 /**
  * Parse a Laravel JsonResource PHP file and extract the field list from toArray().
