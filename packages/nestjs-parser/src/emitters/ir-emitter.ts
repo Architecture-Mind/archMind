@@ -1,4 +1,4 @@
-import type { IntermediateExecutionGraph, ExecutionNode, ExecutionEdge } from "@kidkender/archmind-protocol"
+import type { IntermediateExecutionGraph, ExecutionNode, ExecutionEdge, DTOSchema } from "@kidkender/archmind-protocol"
 import { IR_VERSION, IR_NODE_TYPES } from "@kidkender/archmind-protocol"
 import type { NestJSSemanticRoute } from "../types.js"
 
@@ -6,12 +6,17 @@ const ADAPTER_VERSION = "0.2.0"
 
 export function emitGraphs(
   routes: NestJSSemanticRoute[],
-  globalPipes: boolean = false
+  globalPipes: boolean = false,
+  dtoIndex: Map<string, DTOSchema> = new Map()
 ): IntermediateExecutionGraph[] {
-  return routes.map(r => emitGraph(r, globalPipes))
+  return routes.map(r => emitGraph(r, globalPipes, dtoIndex))
 }
 
-function emitGraph(route: NestJSSemanticRoute, globalPipes: boolean): IntermediateExecutionGraph {
+function emitGraph(
+  route: NestJSSemanticRoute,
+  globalPipes: boolean,
+  dtoIndex: Map<string, DTOSchema>
+): IntermediateExecutionGraph {
   const nodes: ExecutionNode[] = []
   const edges: ExecutionEdge[] = []
 
@@ -42,11 +47,16 @@ function emitGraph(route: NestJSSemanticRoute, globalPipes: boolean): Intermedia
   // Validation gate — only when DTO is present + ValidationPipe active
   if (route.dto && (route.validationPipe || globalPipes)) {
     const dtoId = `vg_${slug(route.dto)}`
+    const dtoSchema = dtoIndex.get(route.dto)
     nodes.push({
       id: dtoId,
       type: IR_NODE_TYPES.VALIDATION_GATE,
       symbol: route.dto,
       role: "validation",
+      ...(dtoSchema ? {
+        file:   dtoSchema.file,
+        detail: JSON.stringify({ fields: dtoSchema.fields }),
+      } : {}),
     })
     edges.push({
       from: handlerId,
