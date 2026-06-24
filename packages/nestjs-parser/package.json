@@ -1,12 +1,22 @@
 {
   "name": "@kidkender/archmind-nestjs-parser",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Static analysis parser for NestJS projects — extracts routes, auth guards, DTOs, and class-validator field rules into ArchMind IR graphs.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
-  "keywords": ["archmind", "nestjs", "parser", "static-analysis", "dto", "class-validator", "api-contract"],
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "archmind",
+    "nestjs",
+    "parser",
+    "static-analysis",
+    "dto",
+    "class-validator",
+    "api-contract"
+  ],
   "license": "MIT",
   "homepage": "https://github.com/Architecture-Mind/ArchMind#readme",
   "repository": {

@@ -1,12 +1,22 @@
 {
   "name": "@kidkender/archmind-laravel-parser",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Static analysis parser for Laravel projects — extracts routes, middleware chains, FormRequest validation rules, and auth patterns into ArchMind IR graphs.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
-  "keywords": ["archmind", "laravel", "php", "parser", "static-analysis", "form-request", "api-contract"],
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "archmind",
+    "laravel",
+    "php",
+    "parser",
+    "static-analysis",
+    "form-request",
+    "api-contract"
+  ],
   "license": "MIT",
   "homepage": "https://github.com/Architecture-Mind/ArchMind#readme",
   "repository": {
