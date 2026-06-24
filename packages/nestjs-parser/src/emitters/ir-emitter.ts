@@ -56,7 +56,7 @@ function emitGraph(route: NestJSSemanticRoute, globalPipes: boolean): Intermedia
     })
   }
 
-  // Side-effect nodes (ir:queue_job, ir:event_dispatch, ir:mail)
+  // Side-effect nodes (ir:queue_job, ir:event_dispatch, ir:mail, ir:notification)
   for (let i = 0; i < route.sideEffects.length; i++) {
     const se = route.sideEffects[i]
     const seId = `se_${i}_${slug(se.symbol)}`

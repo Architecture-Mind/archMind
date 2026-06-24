@@ -12,8 +12,8 @@ describe("NestJS side-effect extraction", () => {
     graphs = parseNestJSProject(FIXTURES)
   })
 
-  test("emits 3 graphs (create, notify, findOne)", () => {
-    expect(graphs).toHaveLength(3)
+  test("emits 4 graphs (create, notify, findOne, user notification)", () => {
+    expect(graphs).toHaveLength(4)
   })
 
   describe("POST /orders — queue_job + event_dispatch", () => {
@@ -94,5 +94,37 @@ describe("NestJS side-effect extraction", () => {
       const sideEffectNodes = g.nodes.filter((n) => sideEffectTypes.has(n.type))
       expect(sideEffectNodes).toHaveLength(0)
     })
+  })
+})
+
+// ---- ir:notification — UserNotificationController -------------------------
+
+describe("NestJS side-effect extraction — ir:notification", () => {
+  let graphs: ReturnType<typeof parseNestJSProject>
+
+  beforeAll(() => {
+    graphs = parseNestJSProject(join(dirname(fileURLToPath(import.meta.url)), "fixtures", "side-effects"))
+  })
+
+  test("POST /users/:id/notify emits ir:notification node", () => {
+    const g = graphs.find((g) => g.method === "POST" && g.path.includes("notify"))
+    expect(g).toBeDefined()
+    const notifNode = g!.nodes.find((n) => n.type === "ir:notification")
+    expect(notifNode).toBeDefined()
+  })
+
+  test("ir:notification symbol is the first arg of send()", () => {
+    const g = graphs.find((g) => g.method === "POST" && g.path.includes("notify"))!
+    const notifNode = g.nodes.find((n) => n.type === "ir:notification")
+    expect(notifNode?.symbol).toBe("welcome")
+  })
+
+  test("dispatches edge connects handler to notification node", () => {
+    const g = graphs.find((g) => g.method === "POST" && g.path.includes("notify"))!
+    const handler  = g.nodes.find((n) => n.type === "ir:business_handler")
+    const notif    = g.nodes.find((n) => n.type === "ir:notification")
+    const edge     = g.edges.find((e) => e.from === handler?.id && e.to === notif?.id)
+    expect(edge).toBeDefined()
+    expect(edge?.relation).toBe("dispatches")
   })
 })

@@ -86,10 +86,10 @@ const SKELETONS: Record<string, IntermediateExecutionGraph> = {
     annotations: [],
   },
   "LARAVEL-API-RESOURCE-001": {
-    entrypoint: "GET /orders/{order}",
-    method: "GET", path: "/orders/{order}",
+    entrypoint: "GET /v1/invoices/{id}",
+    method: "GET", path: "/v1/invoices/{id}",
     nodes: [
-      { id: "ctrl", type: "ir:business_handler", symbol: "OrderController::show", role: "handler", file: "app/Http/Controllers/OrderController.php" },
+      { id: "ctrl", type: "ir:business_handler", symbol: "InvoicesController::show", role: "handler", file: "app/Http/Controllers/InvoicesController.php" },
     ],
     edges: [],
     annotations: [],

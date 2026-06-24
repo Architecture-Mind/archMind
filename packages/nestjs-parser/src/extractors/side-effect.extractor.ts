@@ -2,20 +2,21 @@ import { SyntaxKind } from "ts-morph"
 import type { ClassDeclaration, MethodDeclaration } from "ts-morph"
 
 export interface SideEffectDescriptor {
-  type: "ir:queue_job" | "ir:event_dispatch" | "ir:mail"
+  type: "ir:queue_job" | "ir:event_dispatch" | "ir:mail" | "ir:notification"
   symbol: string
   queued?: boolean
 }
 
-type FieldKind = "queue" | "event_emitter" | "mailer"
+type FieldKind = "queue" | "event_emitter" | "mailer" | "notifier"
 
 /**
  * Map constructor-injected fields to their semantic role.
  *
  * Recognises:
- *   @InjectQueue(...)  or  Queue type → "queue"
- *   EventEmitter2 type                → "event_emitter"
- *   MailerService / Mailer type       → "mailer"
+ *   @InjectQueue(...)  or  Queue type          → "queue"
+ *   EventEmitter2 type                         → "event_emitter"
+ *   MailerService / Mailer type                → "mailer"
+ *   NotificationService / Notifier / Fcm type  → "notifier"
  */
 function getConstructorFieldKinds(cls: ClassDeclaration): Map<string, FieldKind> {
   const map = new Map<string, FieldKind>()
@@ -32,6 +33,8 @@ function getConstructorFieldKinds(cls: ClassDeclaration): Map<string, FieldKind>
         map.set(fieldName, "event_emitter")
       } else if (typeName.includes("MailerService") || typeName.includes("Mailer")) {
         map.set(fieldName, "mailer")
+      } else if (/Notification.*Service|NotificationService|Notifier|FcmService|PushService|FirebaseService/i.test(typeName)) {
+        map.set(fieldName, "notifier")
       }
     }
   }
@@ -81,6 +84,9 @@ export function extractSideEffects(
       results.push({ type: "ir:event_dispatch", symbol: eventName })
     } else if (kind === "mailer" && (calledMethod === "sendMail" || calledMethod === "send")) {
       results.push({ type: "ir:mail", symbol: "sendMail", queued: false })
+    } else if (kind === "notifier" && /send|notify|push|dispatch/i.test(calledMethod)) {
+      const notifName = args[0]?.getText().replace(/['"]/g, "") ?? calledMethod
+      results.push({ type: "ir:notification", symbol: notifName })
     }
   }
 

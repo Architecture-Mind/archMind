@@ -1,17 +1,24 @@
 id: NESTJS-FILE-001
-entrypoint: "POST /ipfs/copy-file"
+entrypoint: "POST /files/copy-file"
 framework: nestjs
 source_project: IPFS-api
-adapter_version: "0.2.0"
+adapter_version: "0.3.0"
 
 retrieval:
   query: "Who can copy a file, and is the copy request validated before processing?"
 
 nodes:
-  - id: ipfs_controller_copy
+  - id: file_auth_gate
+    type: ir:auth_gate
+    symbol: JwtAuthGuard
+    retrieval:
+      relevance: HIGH
+      compressible: false
+
+  - id: file_controller_copy
     type: ir:business_handler
-    symbol: IpfsController::copyFile
-    file: src/ipfs/ipfs.controller.ts
+    symbol: FileController::copyFile
+    file: src/files/file.controller.ts
     retrieval:
       relevance: HIGH
       compressible: false
@@ -24,22 +31,18 @@ nodes:
       compressible: false
 
 edges:
-  - from: ipfs_controller_copy
+  - from: file_auth_gate
+    to: file_controller_copy
+    relation: next_middleware
+
+  - from: file_controller_copy
     to: transfer_dto
     relation: validates
 
-expected_findings:
-  - type: missing_authentication
-    required_nodes: [ipfs_controller_copy]
-
-expected_top_finding: missing_authentication
-
 annotations:
   - type: security_note
-    nodes: [ipfs_controller_copy]
+    nodes: [file_controller_copy]
     description: >
-      POST /ipfs/copy-file has NO authentication guard — unlike upload-file
-      and mutiple-files which use @UseGuards(JwtAuthGuard), copy-file is
-      completely unauthenticated. Any anonymous caller can copy files.
-      TransferIpfsFileDto validates the request body but provides no
-      access control.
+      POST /files/copy-file is protected by JwtAuthGuard applied at class level.
+      TransferIpfsFileDto is validated via global ValidationPipe.
+      Both auth and validation are in place for this endpoint.
