@@ -197,19 +197,20 @@ export function extractUseMap(root: Parser.SyntaxNode): Map<string, string> {
 }
 
 function registerUseClause(clause: Parser.SyntaxNode, prefix: string, map: Map<string, string>): void {
-  const qualName  = (clause.children as Parser.SyntaxNode[]).find(
+  const children = clause.children as Parser.SyntaxNode[]
+  const qualName  = children.find(
     (c) => c.type === "qualified_name" || c.type === "name"
-  )
-  const aliasNode = (clause.children as Parser.SyntaxNode[]).find(
-    (c) => c.type === "alias_clause"
   )
   if (!qualName) return
   const raw  = qualName.text.trim()
   if (!raw)  return
   const fqcn = prefix ? `${prefix}\\${raw}` : raw
-  const shortName = aliasNode
-    ? ((aliasNode.children as Parser.SyntaxNode[]).find((c) => c.type === "name")?.text ?? lastSegment(fqcn))
-    : lastSegment(fqcn)
+
+  // tree-sitter-php puts `as <name>` as direct children of namespace_use_clause,
+  // not wrapped in an alias_clause node.
+  const asIdx    = children.findIndex((c) => c.type === "as")
+  const aliasName = asIdx >= 0 ? children[asIdx + 1]?.text?.trim() : undefined
+  const shortName = aliasName ?? lastSegment(fqcn)
   map.set(shortName, fqcn)
 }
 
