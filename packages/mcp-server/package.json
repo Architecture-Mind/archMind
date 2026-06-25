@@ -1,6 +1,6 @@
 {
   "name": "@kidkender/archmind-mcp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "ArchMind MCP server — semantic execution graph intelligence for Laravel and NestJS projects, wired into Claude Code and any MCP-compatible AI client.",
   "type": "module",
   "bin": {
