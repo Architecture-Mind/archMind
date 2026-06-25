@@ -376,3 +376,60 @@ describe("Cross-framework: auth + side-effects pattern", () => {
     expect(full(nestjsTypes)).toBe(true)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Pattern 7: Auth + API Resource (response serialization)
+//   Laravel:  middleware('auth:sanctum') + return new InvoiceResource($invoice)
+//   NestJS:   @UseGuards(JwtAuthGuard) + return plainToInstance(InvoiceResponseDto, ...)
+//
+//   Expected IR: both must contain auth_gate + api_resource + business_handler
+// ---------------------------------------------------------------------------
+
+describe("Cross-framework: auth + api_resource pattern", () => {
+  let laravelTypes: Set<string>
+  let nestjsTypes:  Set<string>
+
+  beforeAll(() => {
+    const lg = laravelGraphsFor("auth-api-resource")
+    const ng = nestjsGraphsFor("auth-api-resource")
+    expect(lg).toHaveLength(1)
+    expect(ng).toHaveLength(1)
+    laravelTypes = irNodeTypes(lg[0])
+    nestjsTypes  = irNodeTypes(ng[0])
+  })
+
+  test("Laravel graph has ir:auth_gate", () => {
+    expect(laravelTypes.has("ir:auth_gate")).toBe(true)
+  })
+
+  test("NestJS graph has ir:auth_gate", () => {
+    expect(nestjsTypes.has("ir:auth_gate")).toBe(true)
+  })
+
+  test("Laravel graph has ir:api_resource (JsonResource)", () => {
+    expect(laravelTypes.has("ir:api_resource")).toBe(true)
+  })
+
+  test("NestJS graph has ir:api_resource (plainToInstance DTO)", () => {
+    expect(nestjsTypes.has("ir:api_resource")).toBe(true)
+  })
+
+  test("Laravel ir:api_resource symbol is InvoiceResource::toArray", () => {
+    const lg = laravelGraphsFor("auth-api-resource")
+    const node = lg[0].nodes.find(n => n.type === "ir:api_resource")
+    expect(node?.symbol).toBe("InvoiceResource::toArray")
+  })
+
+  test("NestJS ir:api_resource symbol is InvoiceResponseDto::serialize", () => {
+    const ng = nestjsGraphsFor("auth-api-resource")
+    const node = ng[0].nodes.find(n => n.type === "ir:api_resource")
+    expect(node?.symbol).toBe("InvoiceResponseDto::serialize")
+  })
+
+  test("EQUIVALENCE: both have auth_gate + api_resource + business_handler", () => {
+    const full = (t: Set<string>) =>
+      t.has("ir:auth_gate") && t.has("ir:api_resource") && t.has("ir:business_handler")
+    expect(full(laravelTypes)).toBe(true)
+    expect(full(nestjsTypes)).toBe(true)
+  })
+})
