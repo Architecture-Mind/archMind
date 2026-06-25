@@ -6,8 +6,9 @@ export interface GuardDescriptor {
 
 import type { SideEffectDescriptor } from "./extractors/side-effect.extractor.js"
 import type { ServiceCallDescriptor } from "./extractors/service-call.extractor.js"
+import type { TransactionBlock } from "./extractors/transaction.extractor.js"
 
-export type { SideEffectDescriptor, ServiceCallDescriptor }
+export type { SideEffectDescriptor, ServiceCallDescriptor, TransactionBlock }
 
 export interface NestJSSemanticRoute {
   method: string
@@ -21,4 +22,5 @@ export interface NestJSSemanticRoute {
   dto: string | null
   sideEffects: SideEffectDescriptor[]
   serviceCalls: ServiceCallDescriptor[]
+  transactions: TransactionBlock[]
 }

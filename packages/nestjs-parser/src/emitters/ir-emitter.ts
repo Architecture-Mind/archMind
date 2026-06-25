@@ -105,6 +105,40 @@ function emitGraph(
     })
   }
 
+  // Transaction nodes (ir:txn_boundary + ir:txn_write)
+  for (let i = 0; i < (route.transactions?.length ?? 0); i++) {
+    const txn   = route.transactions[i]
+    const txnId = `txn_${i}_${handlerId}`
+    nodes.push({
+      id:     txnId,
+      type:   IR_NODE_TYPES.TXN_BOUNDARY,
+      symbol: txn.symbol,
+      role:   "atomicity",
+    })
+    edges.push({
+      from:         handlerId,
+      to:           txnId,
+      relation:     "opens_transaction",
+      traceability: "static",
+    })
+    for (let j = 0; j < txn.writes.length; j++) {
+      const w       = txn.writes[j]
+      const writeId = `txn_write_${i}_${j}_${handlerId}`
+      nodes.push({
+        id:     writeId,
+        type:   IR_NODE_TYPES.TXN_WRITE,
+        symbol: `${w.entity}::${w.operation}`,
+        role:   "persistence",
+      })
+      edges.push({
+        from:         txnId,
+        to:           writeId,
+        relation:     "within_transaction",
+        traceability: "static",
+      })
+    }
+  }
+
   // Guard chain: mw_0 → mw_1 → ... → handler
   const guardNodes = nodes.filter(n => n.id.startsWith("mw_"))
   for (let i = 0; i < guardNodes.length - 1; i++) {

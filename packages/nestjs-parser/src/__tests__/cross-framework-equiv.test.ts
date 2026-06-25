@@ -256,3 +256,67 @@ describe("Cross-framework: auth + service call pattern", () => {
     expect(full(nestjsTypes)).toBe(true)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Pattern 5: Auth + Transaction
+//   Laravel:  middleware('auth:sanctum') + DB::transaction(function() { ... })
+//   NestJS:   @UseGuards(JwtAuthGuard) + this.dataSource.transaction(async (m) => { ... })
+//
+//   Expected IR: both must contain auth_gate + txn_boundary + txn_write + business_handler
+// ---------------------------------------------------------------------------
+
+describe("Cross-framework: auth + transaction pattern", () => {
+  let laravelGraphs: IntermediateExecutionGraph[]
+  let nestjsGraphs:  IntermediateExecutionGraph[]
+  let laravelTypes: Set<string>
+  let nestjsTypes:  Set<string>
+
+  beforeAll(() => {
+    laravelGraphs = laravelGraphsFor("auth-transaction")
+    nestjsGraphs  = nestjsGraphsFor("auth-transaction")
+    expect(laravelGraphs).toHaveLength(1)
+    expect(nestjsGraphs).toHaveLength(1)
+    laravelTypes = irNodeTypes(laravelGraphs[0])
+    nestjsTypes  = irNodeTypes(nestjsGraphs[0])
+  })
+
+  test("Laravel graph has ir:auth_gate", () => {
+    expect(laravelTypes.has("ir:auth_gate")).toBe(true)
+  })
+
+  test("NestJS graph has ir:auth_gate", () => {
+    expect(nestjsTypes.has("ir:auth_gate")).toBe(true)
+  })
+
+  test("Laravel graph has ir:txn_boundary", () => {
+    expect(laravelTypes.has("ir:txn_boundary")).toBe(true)
+  })
+
+  test("NestJS graph has ir:txn_boundary (DataSource.transaction)", () => {
+    expect(nestjsTypes.has("ir:txn_boundary")).toBe(true)
+  })
+
+  test("Laravel graph has ir:txn_write", () => {
+    expect(laravelTypes.has("ir:txn_write")).toBe(true)
+  })
+
+  test("NestJS graph has ir:txn_write (manager.save)", () => {
+    expect(nestjsTypes.has("ir:txn_write")).toBe(true)
+  })
+
+  test("NestJS txn_write nodes detect Order and Payment entity saves", () => {
+    const writes = nestjsGraphs[0].nodes
+      .filter(n => n.type === "ir:txn_write")
+      .map(n => n.symbol)
+    expect(writes.some(s => s.includes("Order"))).toBe(true)
+    expect(writes.some(s => s.includes("Payment"))).toBe(true)
+  })
+
+  test("EQUIVALENCE: both have auth_gate + txn_boundary + txn_write + business_handler", () => {
+    const full = (t: Set<string>) =>
+      t.has("ir:auth_gate") && t.has("ir:txn_boundary") &&
+      t.has("ir:txn_write") && t.has("ir:business_handler")
+    expect(full(laravelTypes)).toBe(true)
+    expect(full(nestjsTypes)).toBe(true)
+  })
+})
