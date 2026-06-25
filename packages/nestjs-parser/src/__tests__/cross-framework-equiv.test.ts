@@ -320,3 +320,59 @@ describe("Cross-framework: auth + transaction pattern", () => {
     expect(full(nestjsTypes)).toBe(true)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Pattern 6: Auth + Side Effects
+//   Laravel:  middleware('auth:sanctum') + GenerateInvoiceJob::dispatch() + event(new OrderCreatedEvent())
+//   NestJS:   @UseGuards(JwtAuthGuard) + queue.add('generate-invoice') + eventEmitter.emit('order.created')
+//
+//   Expected IR: both must contain auth_gate + queue_job + event_dispatch + business_handler
+// ---------------------------------------------------------------------------
+
+describe("Cross-framework: auth + side-effects pattern", () => {
+  let laravelGraphs: IntermediateExecutionGraph[]
+  let nestjsGraphs:  IntermediateExecutionGraph[]
+  let laravelTypes: Set<string>
+  let nestjsTypes:  Set<string>
+
+  beforeAll(() => {
+    laravelGraphs = laravelGraphsFor("auth-side-effects")
+    nestjsGraphs  = nestjsGraphsFor("auth-side-effects")
+    expect(laravelGraphs).toHaveLength(1)
+    expect(nestjsGraphs).toHaveLength(1)
+    laravelTypes = irNodeTypes(laravelGraphs[0])
+    nestjsTypes  = irNodeTypes(nestjsGraphs[0])
+  })
+
+  test("Laravel graph has ir:auth_gate", () => {
+    expect(laravelTypes.has("ir:auth_gate")).toBe(true)
+  })
+
+  test("NestJS graph has ir:auth_gate", () => {
+    expect(nestjsTypes.has("ir:auth_gate")).toBe(true)
+  })
+
+  test("Laravel graph has ir:queue_job", () => {
+    expect(laravelTypes.has("ir:queue_job")).toBe(true)
+  })
+
+  test("NestJS graph has ir:queue_job", () => {
+    expect(nestjsTypes.has("ir:queue_job")).toBe(true)
+  })
+
+  test("Laravel graph has ir:event_dispatch", () => {
+    expect(laravelTypes.has("ir:event_dispatch")).toBe(true)
+  })
+
+  test("NestJS graph has ir:event_dispatch", () => {
+    expect(nestjsTypes.has("ir:event_dispatch")).toBe(true)
+  })
+
+  test("EQUIVALENCE: both have auth_gate + queue_job + event_dispatch + business_handler", () => {
+    const full = (t: Set<string>) =>
+      t.has("ir:auth_gate") && t.has("ir:queue_job") &&
+      t.has("ir:event_dispatch") && t.has("ir:business_handler")
+    expect(full(laravelTypes)).toBe(true)
+    expect(full(nestjsTypes)).toBe(true)
+  })
+})
