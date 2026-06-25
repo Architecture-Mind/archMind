@@ -10,6 +10,34 @@ import type {
 import { IR_NODE_TYPES, IR_EDGE_RELATIONS, IR_VERSION } from "@kidkender/archmind-protocol"
 
 const ADAPTER_VERSION = "0.1.0"
+
+// ---- Cached parse-op wrappers --------------------------------------------
+
+type CtrlL1   = ReturnType<typeof parseControllerMethod>
+type ApiRes   = ReturnType<typeof parseApiResource>
+type TxnRes   = ReturnType<typeof parseTransactions>
+type IsoRes   = ReturnType<typeof parseIsolation>
+
+function ctrlL1(cache: ParseCache<unknown> | null, filePath: string, method: string): CtrlL1 {
+  if (!cache) return parseControllerMethod(filePath, method)
+  return (cache as ParseCache<CtrlL1>).compute(filePath, method, () => parseControllerMethod(filePath, method))
+}
+
+function apiRes(cache: ParseCache<unknown> | null, filePath: string): ApiRes {
+  if (!cache) return parseApiResource(filePath)
+  return (cache as ParseCache<ApiRes>).compute(filePath, "parseApiResource", () => parseApiResource(filePath))
+}
+
+function txnRes(cache: ParseCache<unknown> | null, filePath: string): TxnRes {
+  if (!cache) return parseTransactions(filePath)
+  return (cache as ParseCache<TxnRes>).compute(filePath, "parseTransactions", () => parseTransactions(filePath))
+}
+
+function isoRes(cache: ParseCache<unknown> | null, filePath: string, opts: { tenantSignals: string[]; tenantContainerKeys: string[] }): IsoRes {
+  if (!cache) return parseIsolation(filePath, opts)
+  // opts are constant per project root, so discriminator doesn't need to include them
+  return (cache as ParseCache<IsoRes>).compute(filePath, "parseIsolation", () => parseIsolation(filePath, opts))
+}
 import { parseControllerMethod, parseFormRequestAuthorize, type ServiceCall, type ModelParam, type StandaloneDispatch, type NotificationDispatch } from "./controller-parser.js"
 import type { ListenerEntry } from "./event-listener-mapper.js"
 import { middlewareToNode } from "./middleware-mapper.js"
@@ -21,6 +49,7 @@ import { parseTransactions } from "./transaction-parser.js"
 import { parseIsolation } from "./isolation-parser.js"
 import { DEFAULT_PROJECT_CONFIG, fqcnToPath, resolvePolicyFile } from "./project-config.js"
 import { parseApiResource, type NestedResourceRef } from "./resource-parser.js"
+import { ParseCache } from "./parse-cache.js"
 
 // ---- Public API -------------------------------------------------------
 
@@ -53,6 +82,15 @@ export interface AugmentOptions {
    * Still accepted for backwards compatibility — merged with config if both present.
    */
   permissionConstantFiles?: string[]
+  /**
+   * Optional parse-op memoization cache. When provided, expensive tree-sitter
+   * parse operations (parseControllerMethod, parseApiResource, parseTransactions,
+   * parseIsolation) are memoized by file content hash.
+   *
+   * Scope: one ParseCache instance per project_root. Never share across projects.
+   * Pass the same instance on repeated augmentGraph calls to get cache hits.
+   */
+  cache?: ParseCache<unknown>
 }
 
 /**
@@ -70,6 +108,8 @@ export function augmentGraph(
   opts: AugmentOptions
 ): IntermediateExecutionGraph {
   const config = opts.config ?? DEFAULT_PROJECT_CONFIG
+  const cache  = opts.cache ?? null
+
   // Merge legacy permissionConstantFiles with config (backwards compat)
   const permFiles = [
     ...config.permissionConstantFiles,
@@ -86,7 +126,7 @@ export function augmentGraph(
     const [ctrlClass, methodName] = ctrlNode.symbol.split("::")
     if (methodName) {
       const filePath = join(opts.projectRoot, ctrlNode.file)
-      const l1 = parseControllerMethod(filePath, methodName)
+      const l1 = ctrlL1(cache, filePath, methodName)
       if (l1) {
         // FormRequest nodes
         for (const fr of l1.formRequests) {
@@ -149,7 +189,7 @@ export function augmentGraph(
         emitResourceNodes(newNodes, newEdges, ctrlNode, l1.modelParams, addedPolicyNodes, l1.authorizeCalls)
 
         // API_RESOURCE nodes — JsonResource returns (IR v1.2)
-        emitApiResourceNodes(newNodes, newEdges, ctrlNode, l1.returnedResources, opts.projectRoot, config)
+        emitApiResourceNodes(newNodes, newEdges, ctrlNode, l1.returnedResources, opts.projectRoot, config, cache)
 
         // Standalone dispatch nodes — Jobs/Events dispatched outside DB::transaction() (IR v1.3)
         emitStandaloneDispatchNodes(newNodes, newEdges, ctrlNode, l1.standaloneDispatches, opts.projectRoot, config.namespaces)
@@ -169,10 +209,7 @@ export function augmentGraph(
           if (!policyNode.file) continue
           const [, policyMethod] = policyNode.symbol.split("::")
           if (!policyMethod) continue
-          const policyL1 = parseControllerMethod(
-            join(opts.projectRoot, policyNode.file),
-            policyMethod
-          )
+          const policyL1 = ctrlL1(cache, join(opts.projectRoot, policyNode.file), policyMethod)
           if (policyL1) {
             const created = addServiceCallNodes(newNodes, newEdges, policyNode.id, policyL1.serviceCalls, config.namespaces)
             policyServiceNodes.push(...created)
@@ -194,7 +231,8 @@ export function augmentGraph(
             opts.projectRoot, config,
             MAX_SERVICE_DEPTH - 1,
             visited, budget,
-            opts.expansionFocus
+            opts.expansionFocus,
+            cache
           )
         }
       }
@@ -206,7 +244,7 @@ export function augmentGraph(
   for (const mwNode of graph.nodes) {
     if (!mwTypes.has(mwNode.type) || !mwNode.file) continue
     const filePath = join(opts.projectRoot, mwNode.file)
-    const l1 = parseControllerMethod(filePath, "handle")
+    const l1 = ctrlL1(cache, filePath, "handle")
     if (l1) {
       const mwServiceNodes = addServiceCallNodes(newNodes, newEdges, mwNode.id, l1.serviceCalls, config.namespaces)
       // Also expand service calls from middleware
@@ -220,7 +258,8 @@ export function augmentGraph(
           opts.projectRoot, config,
           MAX_SERVICE_DEPTH - 1,
           visited, budget,
-          opts.expansionFocus
+          opts.expansionFocus,
+          cache
         )
       }
     }
@@ -240,7 +279,7 @@ export function augmentGraph(
   const ctrlNodeForTxn = graph.nodes.find((n) => n.type === IR_NODE_TYPES.BUSINESS_HANDLER)
   if (ctrlNodeForTxn?.file) {
     const filePath = join(opts.projectRoot, ctrlNodeForTxn.file)
-    const txnResult = parseTransactions(filePath)
+    const txnResult = txnRes(cache, filePath)
     if (txnResult.hasTransaction) {
       addTransactionNodes(newNodes, newEdges, ctrlNodeForTxn.id, txnResult.blocks)
     }
@@ -253,10 +292,8 @@ export function augmentGraph(
   const ctrlNodeForIso = graph.nodes.find((n) => n.type === IR_NODE_TYPES.BUSINESS_HANDLER)
   if (ctrlNodeForIso?.file) {
     const filePath = join(opts.projectRoot, ctrlNodeForIso.file)
-    const isoResult = parseIsolation(filePath, {
-      tenantSignals:      config.conventions.tenantSignals,
-      tenantContainerKeys: config.conventions.tenantContainerKeys,
-    })
+    const isoConv  = { tenantSignals: config.conventions.tenantSignals, tenantContainerKeys: config.conventions.tenantContainerKeys }
+    const isoResult = isoRes(cache, filePath, isoConv)
     addIsolationNodes(newNodes, newEdges, ctrlNodeForIso.id, isoResult)
   }
 
@@ -476,7 +513,8 @@ function expandServiceCalls(
   depth: number,
   visited: Set<string>,
   budget: { remaining: number },
-  focus?: ExpansionFocus
+  focus?: ExpansionFocus,
+  cache: ParseCache<unknown> | null = null
 ): void {
   if (depth <= 0 || serviceNodes.length === 0 || budget.remaining <= 0) return
 
@@ -497,10 +535,11 @@ function expandServiceCalls(
     visited.add(visitKey)
 
     const filePath = join(projectRoot, scNode.file)
+    const isoConv  = { tenantSignals: config.conventions.tenantSignals, tenantContainerKeys: config.conventions.tenantContainerKeys }
 
     // Transaction pass inside service method
     try {
-      const txnResult = parseTransactions(filePath)
+      const txnResult = txnRes(cache, filePath)
       if (txnResult.hasTransaction) {
         addTransactionNodes(nodes, edges, scNode.id, txnResult.blocks)
         budget.remaining -= txnResult.blocks.length * 3
@@ -509,17 +548,14 @@ function expandServiceCalls(
 
     // Isolation/query pass inside service method
     try {
-      const isoResult = parseIsolation(filePath, {
-        tenantSignals:       config.conventions.tenantSignals,
-        tenantContainerKeys: config.conventions.tenantContainerKeys,
-      })
+      const isoResult = isoRes(cache, filePath, isoConv)
       addIsolationNodes(nodes, edges, scNode.id, isoResult)
       budget.remaining -= isoResult.modelQueries.length
     } catch { /* skip */ }
 
     // Deeper service calls from this service method
     try {
-      const l1 = parseControllerMethod(filePath, methodName)
+      const l1 = ctrlL1(cache, filePath, methodName)
       if (l1 && l1.serviceCalls.length > 0) {
         const newSvcNodes = addServiceCallNodes(nodes, edges, scNode.id, l1.serviceCalls, config.namespaces)
         budget.remaining -= newSvcNodes.length
@@ -530,7 +566,7 @@ function expandServiceCalls(
     } catch { /* skip */ }
   }
 
-  expandServiceCalls(nodes, edges, nextServiceNodes, projectRoot, config, depth - 1, visited, budget, focus)
+  expandServiceCalls(nodes, edges, nextServiceNodes, projectRoot, config, depth - 1, visited, budget, focus, cache)
 }
 
 /**
@@ -912,6 +948,7 @@ function emitApiResourceNodes(
   returnedResources: Array<{ shortName: string; fqcn: string; isCollection: boolean }>,
   projectRoot: string,
   config: ProjectConfig,
+  cache: ParseCache<unknown> | null = null
 ): void {
   const seen = new Set<string>()
 
@@ -933,7 +970,7 @@ function emitApiResourceNodes(
     let nestedResources: NestedResourceRef[] = []
 
     if (resourcePath && existsSync(resourcePath)) {
-      const info = parseApiResource(resourcePath)
+      const info = apiRes(cache, resourcePath)
       if (info) {
         fields            = info.fields.map(f => f.key)
         sensitiveFields   = info.fields.filter(f => f.isSensitive).map(f => f.key)
@@ -961,7 +998,7 @@ function emitApiResourceNodes(
     })
 
     // Emit nested resource nodes (depth-1 only to prevent cycles)
-    emitNestedResourceNodes(nodes, edges, node, nestedResources, projectRoot, config)
+    emitNestedResourceNodes(nodes, edges, node, nestedResources, projectRoot, config, cache)
   }
 }
 
@@ -976,6 +1013,7 @@ function emitNestedResourceNodes(
   nestedRefs: NestedResourceRef[],
   projectRoot: string,
   config: ProjectConfig,
+  cache: ParseCache<unknown> | null = null
 ): void {
   const seen = new Set<string>()
 
@@ -995,7 +1033,7 @@ function emitNestedResourceNodes(
     let isCollection = nr.isCollection
 
     if (resourcePath && existsSync(resourcePath)) {
-      const info = parseApiResource(resourcePath)
+      const info = apiRes(cache, resourcePath)
       if (info) {
         fields            = info.fields.map(f => f.key)
         sensitiveFields   = info.fields.filter(f => f.isSensitive).map(f => f.key)

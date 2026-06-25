@@ -1,10 +1,11 @@
-import { parseRouteFile, augmentGraph, loadProjectConfig, resolveAliasMap } from "@archmind/laravel-parser"
+import { parseRouteFile, augmentGraph, loadProjectConfig, resolveAliasMap, ParseCache } from "@archmind/laravel-parser"
 import { parseNestJSProject } from "@archmind/nestjs-parser"
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
 import { join } from "path"
 import { existsSync } from "fs"
 
-const cache = new Map<string, IntermediateExecutionGraph[]>()
+const cache      = new Map<string, IntermediateExecutionGraph[]>()
+const parseCaches = new Map<string, ParseCache<unknown>>()
 
 export type Framework = "laravel" | "nestjs"
 
@@ -28,6 +29,12 @@ export function getGraphs(projectRoot: string): IntermediateExecutionGraph[] {
   if (framework === "nestjs") {
     graphs = parseNestJSProject(projectRoot)
   } else {
+    // Reuse or create a ParseCache scoped to this project root
+    if (!parseCaches.has(projectRoot)) {
+      parseCaches.set(projectRoot, new ParseCache<unknown>())
+    }
+    const parseCache = parseCaches.get(projectRoot)!
+
     const config = loadProjectConfig(projectRoot)
     const { aliasMap, routeFiles } = resolveAliasMap(projectRoot, config)
     graphs = []
@@ -35,7 +42,7 @@ export function getGraphs(projectRoot: string): IntermediateExecutionGraph[] {
       const routesFile = join(projectRoot, relRouteFile)
       const skeletons = parseRouteFile(routesFile, { aliasMap })
       for (const g of skeletons) {
-        graphs.push(augmentGraph(g, { projectRoot, config }))
+        graphs.push(augmentGraph(g, { projectRoot, config, cache: parseCache }))
       }
     }
   }
@@ -46,4 +53,6 @@ export function getGraphs(projectRoot: string): IntermediateExecutionGraph[] {
 
 export function invalidate(projectRoot: string): void {
   cache.delete(projectRoot)
+  // Also clear the parse-op cache so stale file parses don't persist
+  parseCaches.get(projectRoot)?.clear()
 }
