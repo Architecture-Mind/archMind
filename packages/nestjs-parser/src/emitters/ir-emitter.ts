@@ -105,6 +105,31 @@ function emitGraph(
     })
   }
 
+  // Response resource node (ir:api_resource)
+  if (route.responseResource) {
+    const rr   = route.responseResource
+    const rrId = `api_resource_${slug(rr.className)}_${handlerId}`
+    nodes.push({
+      id:     rrId,
+      type:   "ir:api_resource",
+      symbol: `${rr.className}::serialize`,
+      role:   "response",
+      ...(rr.fields.length > 0 && {
+        detail: JSON.stringify({
+          fields:           rr.fields.map(f => f.name),
+          sensitiveFields:  rr.sensitiveFields,
+          excludedByDefault: rr.excludedByDefault,
+        }),
+      }),
+    })
+    edges.push({
+      from:         handlerId,
+      to:           rrId,
+      relation:     "responds_with",
+      traceability: "static",
+    })
+  }
+
   // Transaction nodes (ir:txn_boundary + ir:txn_write)
   for (let i = 0; i < (route.transactions?.length ?? 0); i++) {
     const txn   = route.transactions[i]

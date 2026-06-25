@@ -8,6 +8,7 @@ import { extractDto } from "./dto.extractor.js"
 import { extractSideEffects } from "./side-effect.extractor.js"
 import { extractServiceCalls } from "./service-call.extractor.js"
 import { extractTransactions } from "./transaction.extractor.js"
+import { extractResponseResource } from "./response.extractor.js"
 import { scanCustomDecorators } from "../resolvers/decorator.scanner.js"
 import type { CustomDecoratorRegistry } from "../resolvers/decorator.scanner.js"
 
@@ -80,6 +81,8 @@ export function extractRoutes(options: RouteExtractorOptions): NestJSSemanticRou
         try { serviceCalls = extractServiceCalls(cls, method) } catch { /* skip on parse error */ }
         let transactions: ReturnType<typeof extractTransactions> = []
         try { transactions = extractTransactions(cls, method) } catch { /* skip on parse error */ }
+        let responseResource: ReturnType<typeof extractResponseResource> = null
+        try { responseResource = extractResponseResource(cls, method, project, projectRoot) } catch { /* skip on parse error */ }
 
         routes.push({
           method: httpMethod,
@@ -94,6 +97,7 @@ export function extractRoutes(options: RouteExtractorOptions): NestJSSemanticRou
           sideEffects,
           serviceCalls,
           transactions,
+          responseResource,
         })
       }
     }
