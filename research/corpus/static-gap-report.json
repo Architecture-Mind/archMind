@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-15T15:28:57.532Z",
+  "generatedAt": "2026-06-25T15:35:13.402Z",
   "repos": [
     {
       "name": "laravel-io",
@@ -13,7 +13,7 @@
         "mail": 4,
         "policy": 5,
         "scheduled_command": 3,
-        "middleware": 3,
+        "middleware": 4,
         "controller": 28,
         "service": 2,
         "observer": 1,
