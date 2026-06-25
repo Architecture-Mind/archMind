@@ -128,6 +128,12 @@ export function augmentGraph(
       const filePath = join(opts.projectRoot, ctrlNode.file)
       const l1 = ctrlL1(cache, filePath, methodName)
       if (l1) {
+        // Backfill line number onto the business_handler node for editor CodeLens anchoring
+        if (l1.methodLine) {
+          const ctrlInNew = newNodes.find(n => n.id === ctrlNode.id)
+          if (ctrlInNew) ctrlInNew.line = l1.methodLine
+        }
+
         // FormRequest nodes
         for (const fr of l1.formRequests) {
           const id = `fr_${fr.shortName.toLowerCase().replace(/[^a-z0-9]/g, "_")}`

@@ -73,6 +73,8 @@ export interface ControllerL1 {
   returnedResources:       ReturnedResource[]
   standaloneDispatches:    StandaloneDispatch[]
   standaloneNotifications: NotificationDispatch[]
+  /** 1-indexed line of the method declaration; used for editor CodeLens anchoring */
+  methodLine?:             number
 }
 
 // Classes that must NOT be treated as FormRequest nodes
@@ -149,6 +151,7 @@ export function parseControllerMethod(
     returnedResources,
     standaloneDispatches,
     standaloneNotifications,
+    methodLine: methodNode.startPosition.row + 1,  // 1-indexed
   }
 }
 

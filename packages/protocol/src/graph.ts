@@ -51,6 +51,7 @@ export interface ExecutionNode {
   type:             string    // use KnownNodeType for known values
   symbol:           string    // e.g. "ResolveTenant::handle", "auth:sanctum"
   file?:            string    // relative path from project root
+  line?:            number    // 1-indexed line of the declaration; used by editor CodeLens anchoring
   args?:            string[]  // e.g. ["task.update"] for CheckPermission
   role?:            string    // semantic hint: "auth_layer_1", "tenant_resolver", etc.
   detail?:          string    // JSON-serialized node-specific metadata (e.g. api_resource field list)
