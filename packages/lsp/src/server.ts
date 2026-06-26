@@ -17,13 +17,26 @@ import { resolve, dirname, join } from "path"
 import { existsSync } from "fs"
 import { WorkspaceManager } from "./workspace/manager.js"
 import { buildInlayHints } from "./providers/inlay-hints.js"
-import { uriToFile, fileToUri } from "./converters/ir-to-lsp.js"
+import { uriToFile } from "./converters/ir-to-lsp.js"
 
 const connection = createConnection(ProposedFeatures.all)
 const documents  = new TextDocuments(TextDocument)
 const manager    = new WorkspaceManager()
 
 let analysisVersion = 0
+
+// Debounced refresh — prevents rapid file switches from flooding Zed with refresh signals
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleRefresh() {
+  if (refreshTimer) clearTimeout(refreshTimer)
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null
+    connection.languages.inlayHint.refresh()
+  }, 150)
+}
+
+// In-progress analysis guard — prevents concurrent analyses for the same root
+const analyzing = new Set<string>()
 
 connection.onInitialize((params: InitializeParams): InitializeResult => {
   const inlayHintCap = params.capabilities.textDocument?.inlayHint
@@ -41,19 +54,20 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
   }
 })
 
-// Trigger analysis on open — if already cached, just refresh hints for the new file
+// Trigger analysis on open
 documents.onDidOpen(async event => {
   const root = findProjectRoot(uriToFile(event.document.uri))
   if (!root) return
   const ctx = manager.getOrCreate(root)
   if (ctx.cache) {
-    connection.languages.inlayHint.refresh()
+    // Already analyzed — debounced refresh so Zed requests hints for this file
+    scheduleRefresh()
     return
   }
   await runAnalysis(root, event.document.uri, event.document.version)
 })
 
-// Trigger analysis on save only (not every keystroke — analysis is project-wide)
+// Trigger re-analysis on save
 documents.onDidSave(async event => {
   const root = findProjectRoot(uriToFile(event.document.uri))
   if (!root) return
@@ -67,7 +81,14 @@ connection.languages.inlayHint.on(async (params: InlayHintParams) => {
   if (!root) return []
 
   const ctx = manager.get(root)
-  if (!ctx?.cache) return []
+
+  // No cache: trigger lazy analysis if not already running, return [] for now
+  if (!ctx?.cache) {
+    if (!analyzing.has(root)) {
+      runAnalysis(root, params.textDocument.uri, 0).catch(() => {})
+    }
+    return []
+  }
 
   // Normalize to forward slashes — parser stores paths with /, Windows uses \
   const normalRoot = root.replace(/\\/g, "/")
@@ -78,15 +99,13 @@ connection.languages.inlayHint.on(async (params: InlayHintParams) => {
               ?? ctx.cache.analysis.indexes.routesByFile.get(normalFile)
               ?? []
 
-  connection.console.log(`[archmind] inlayHint for ${relFile} → ${routes.length} routes`)
-  if (routes.length > 0) {
-    connection.console.log(`[archmind] hint positions: ${routes.map(r => `${r.symbol}@line${r.line}`).join(", ")}`)
-  }
-
   return buildInlayHints(routes)
 })
 
 async function runAnalysis(root: string, triggerUri: string, docVersion: number): Promise<void> {
+  if (analyzing.has(root)) return
+  analyzing.add(root)
+
   const ctx = manager.getOrCreate(root)
 
   try {
@@ -105,14 +124,12 @@ async function runAnalysis(root: string, triggerUri: string, docVersion: number)
     }
 
     connection.console.log(`[archmind] found ${analysis.routes.length} routes`)
-    // Debug: show what file paths are indexed
-    const files = [...analysis.indexes.routesByFile.keys()]
-    connection.console.log(`[archmind] indexed files: ${files.join(", ")}`)
 
-    // Notify client to refresh inlay hints for all open documents in this workspace
-    connection.languages.inlayHint.refresh()
+    scheduleRefresh()
   } catch (err: unknown) {
     connection.console.error(`[archmind] analysis failed: ${String(err)}`)
+  } finally {
+    analyzing.delete(root)
   }
 }
 
