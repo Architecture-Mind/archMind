@@ -1,5 +1,5 @@
-import { InlayHint, InlayHintKind } from "vscode-languageserver"
-import type { RouteInfo } from "@archmind/protocol"
+import { InlayHint, InlayHintKind, MarkupContent } from "vscode-languageserver"
+import type { RouteInfo, FindingInfo } from "@archmind/protocol"
 
 export function buildInlayHints(routes: RouteInfo[]): InlayHint[] {
   return routes.map(route => ({
@@ -33,19 +33,52 @@ function buildLabel(r: RouteInfo): string {
   return parts.join("  ")
 }
 
-function buildTooltip(r: RouteInfo): string {
-  const lines = [`**${r.method} ${r.path}**`]
+const FINDING_DOCS: Record<string, string> = {
+  missing_authorization:  "Route is reachable but has **no authentication or authorization guard**. Any caller — authenticated or not — can invoke this handler.",
+  exposed_read_endpoint:  "Public GET endpoint executes **business logic without auth**. Data may leak to unauthenticated callers.",
+  no_rate_limiting:       "No throttle/rate-limit guard detected. Endpoint is vulnerable to **brute-force or abuse**.",
+  fat_controller:         "Controller calls **5+ services** — consider extracting an application-layer service to keep the handler focused.",
+}
 
-  if (r.authGates.length > 0)    lines.push(`Auth: ${r.authGates.join(", ")}`)
-  if (r.authzChecks.length > 0)  lines.push(`Authz: ${r.authzChecks.join(", ")}`)
-  if (r.validations.length > 0)  lines.push(`Validation: ${r.validations.join(", ")}`)
-  if (r.services.length > 0)     lines.push(`Services: ${r.services.join(", ")}`)
-  if (r.hasTransaction)           lines.push("✓ Transaction boundary")
+const SEVERITY_ICON: Record<string, string> = {
+  CRITICAL: "🔴",
+  HIGH:     "🟠",
+  MEDIUM:   "🟡",
+  LOW:      "🔵",
+  INFO:     "⚪",
+}
 
+function buildFindingBlock(f: FindingInfo): string {
+  const icon = SEVERITY_ICON[f.severity] ?? "⚪"
+  const doc  = FINDING_DOCS[f.type]
+  const lines = [`${icon} **[${f.severity}] ${f.type}**`, `> ${f.summary}`]
+  if (doc) lines.push("", doc)
+  return lines.join("\n")
+}
+
+function buildTooltip(r: RouteInfo): MarkupContent {
+  const sections: string[] = []
+
+  // Header
+  sections.push(`### ${r.method} ${r.path}`)
+
+  // Security summary
+  const secLines: string[] = []
+  if (r.isPublic)                secLines.push("🌐 Public route (no auth required)")
+  else if (r.authGates.length)   secLines.push(`🔒 Auth: ${r.authGates.join(", ")}`)
+  else                           secLines.push("⚠️ No authentication guard")
+  if (r.authzChecks.length)      secLines.push(`🛡 Authz: ${r.authzChecks.join(", ")}`)
+  if (r.validations.length)      secLines.push(`✅ Validation: ${r.validations.join(", ")}`)
+  if (r.services.length)         secLines.push(`⚙️ Services: ${r.services.join(", ")}`)
+  if (r.hasTransaction)          secLines.push("⟲ Runs inside a transaction boundary")
+  sections.push(secLines.join("\n"))
+
+  // Findings
   if (r.findings.length > 0) {
-    lines.push("", "**Findings:**")
-    for (const f of r.findings) lines.push(`[${f.severity}] ${f.summary}`)
+    sections.push("---")
+    sections.push("**Findings**")
+    sections.push(r.findings.map(buildFindingBlock).join("\n\n"))
   }
 
-  return lines.join("\n")
+  return { kind: "markdown", value: sections.join("\n\n") }
 }
