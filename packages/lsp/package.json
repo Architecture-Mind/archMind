@@ -1,6 +1,6 @@
 {
   "name": "@kidkender/archmind-lsp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "ArchMind Language Server — inlay hints and diagnostics for Laravel and NestJS in any LSP-compatible editor",
   "type": "module",
   "bin": {
@@ -25,12 +25,24 @@
     "vscode-languageserver": "^9.0.1",
     "vscode-languageserver-textdocument": "^1.0.11"
   },
-  "keywords": ["laravel", "nestjs", "lsp", "language-server", "inlay-hints", "archmind"],
+  "keywords": [
+    "laravel",
+    "nestjs",
+    "lsp",
+    "language-server",
+    "inlay-hints",
+    "archmind"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kidkender/archmind.git"
   },
-  "engines": { "node": ">=18" },
-  "files": ["dist/lsp.cjs"]
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist/lsp.cjs",
+    "README.md"
+  ]
 }
