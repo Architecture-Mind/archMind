@@ -169,9 +169,10 @@ connection.onHover((params: HoverParams): Hover | null => {
 
   if (routes.length === 0) return null
 
-  // Match by line: hover line is 0-indexed, route.line is 1-indexed
-  const hoverLine = params.position.line + 1
-  const route = routes.find(r => Math.abs(r.line - hoverLine) <= 3)
+  // Match exactly the inlay hint anchor line (last decorator before method)
+  // route.line is 1-indexed (method name), inlay hint sits at route.line - 2 (0-indexed)
+  const hoverLine0 = params.position.line
+  const route = routes.find(r => hoverLine0 === r.line - 2)
   if (!route) return null
 
   return { contents: buildHoverContent(route) }
