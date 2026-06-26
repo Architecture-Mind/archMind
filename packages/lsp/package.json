@@ -1,6 +1,6 @@
 {
   "name": "@kidkender/archmind-lsp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ArchMind Language Server — inlay hints and diagnostics for Laravel and NestJS in any LSP-compatible editor",
   "type": "module",
   "bin": {
@@ -9,6 +9,11 @@
   "scripts": {
     "build": "node build.mjs",
     "dev": "node --loader ts-node/esm src/server.ts"
+  },
+  "dependencies": {
+    "tree-sitter": "^0.21.0",
+    "tree-sitter-php": "^0.23.0",
+    "ts-morph": "^23.0.0"
   },
   "devDependencies": {
     "@archmind/laravel-parser": "*",
