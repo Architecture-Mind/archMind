@@ -25,23 +25,31 @@ const manager    = new WorkspaceManager()
 
 let analysisVersion = 0
 
-connection.onInitialize((_params: InitializeParams): InitializeResult => ({
-  capabilities: {
-    textDocumentSync: TextDocumentSyncKind.Incremental,
-    inlayHintProvider: true,
-  },
-  serverInfo: {
-    name:    "archmind-lsp",
-    version: "0.1.0",
-  },
-}))
+connection.onInitialize((params: InitializeParams): InitializeResult => {
+  const inlayHintCap = params.capabilities.textDocument?.inlayHint
+  connection.console.log(`[archmind] client inlayHint support: ${JSON.stringify(inlayHintCap)}`)
 
-// Trigger analysis on open — skip if already cached for this root
+  return {
+    capabilities: {
+      textDocumentSync: TextDocumentSyncKind.Incremental,
+      inlayHintProvider: { resolveProvider: false },
+    },
+    serverInfo: {
+      name:    "archmind-lsp",
+      version: "0.1.0",
+    },
+  }
+})
+
+// Trigger analysis on open — if already cached, just refresh hints for the new file
 documents.onDidOpen(async event => {
   const root = findProjectRoot(uriToFile(event.document.uri))
   if (!root) return
   const ctx = manager.getOrCreate(root)
-  if (ctx.cache) return
+  if (ctx.cache) {
+    connection.languages.inlayHint.refresh()
+    return
+  }
   await runAnalysis(root, event.document.uri, event.document.version)
 })
 
@@ -71,6 +79,9 @@ connection.languages.inlayHint.on(async (params: InlayHintParams) => {
               ?? []
 
   connection.console.log(`[archmind] inlayHint for ${relFile} → ${routes.length} routes`)
+  if (routes.length > 0) {
+    connection.console.log(`[archmind] hint positions: ${routes.map(r => `${r.symbol}@line${r.line}`).join(", ")}`)
+  }
 
   return buildInlayHints(routes)
 })
