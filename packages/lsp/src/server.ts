@@ -11,6 +11,8 @@ import {
   InitializeResult,
   TextDocumentSyncKind,
   InlayHintParams,
+  HoverParams,
+  Hover,
 } from "vscode-languageserver/node.js"
 import { TextDocument } from "vscode-languageserver-textdocument"
 import { resolve, dirname, join } from "path"
@@ -18,6 +20,7 @@ import { existsSync } from "fs"
 import { WorkspaceManager } from "./workspace/manager.js"
 import { buildInlayHints } from "./providers/inlay-hints.js"
 import { uriToFile } from "./converters/ir-to-lsp.js"
+import type { RouteInfo } from "@archmind/protocol"
 
 const connection = createConnection(ProposedFeatures.all)
 const documents  = new TextDocuments(TextDocument)
@@ -46,6 +49,7 @@ connection.onInitialize((params: InitializeParams): InitializeResult => {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,
       inlayHintProvider: { resolveProvider: false },
+      hoverProvider: true,
     },
     serverInfo: {
       name:    "archmind-lsp",
@@ -145,6 +149,67 @@ function findProjectRoot(filePath: string): string | null {
   }
 
   return null
+}
+
+connection.onHover((params: HoverParams): Hover | null => {
+  const filePath = uriToFile(params.textDocument.uri)
+  const root     = findProjectRoot(filePath)
+  if (!root) return null
+
+  const ctx = manager.get(root)
+  if (!ctx?.cache) return null
+
+  const normalRoot = root.replace(/\\/g, "/")
+  const normalFile = filePath.replace(/\\/g, "/")
+  const relFile    = normalFile.replace(normalRoot, "").replace(/^\//, "")
+
+  const routes = ctx.cache.analysis.indexes.routesByFile.get(relFile)
+              ?? ctx.cache.analysis.indexes.routesByFile.get(normalFile)
+              ?? []
+
+  if (routes.length === 0) return null
+
+  // Match by line: hover line is 0-indexed, route.line is 1-indexed
+  const hoverLine = params.position.line + 1
+  const route = routes.find(r => Math.abs(r.line - hoverLine) <= 3)
+  if (!route) return null
+
+  return { contents: buildHoverContent(route) }
+})
+
+function buildHoverContent(r: RouteInfo) {
+  const SEVERITY_ICON: Record<string, string> = {
+    CRITICAL: "🔴", HIGH: "🟠", MEDIUM: "🟡", LOW: "🔵", INFO: "⚪",
+  }
+  const FINDING_DOCS: Record<string, string> = {
+    missing_authorization:  "Route is reachable but has **no auth or authorization guard**. Any caller can invoke this handler.",
+    exposed_read_endpoint:  "Public GET endpoint executes **business logic without auth**. Data may leak to unauthenticated callers.",
+    no_rate_limiting:       "No throttle/rate-limit guard detected. Vulnerable to **brute-force or abuse**.",
+    fat_controller:         "Controller calls **5+ services** — consider extracting an application-layer service.",
+  }
+
+  const lines: string[] = [`### ${r.method} \`${r.path}\``]
+
+  if (r.isPublic)              lines.push("🌐 **Public** — no auth required")
+  else if (r.authGates.length) lines.push(`🔒 **Auth:** ${r.authGates.join(", ")}`)
+  else                         lines.push("⚠️ **No authentication guard**")
+
+  if (r.authzChecks.length)   lines.push(`🛡 **Authz:** ${r.authzChecks.join(", ")}`)
+  if (r.validations.length)   lines.push(`✅ **Validation:** ${r.validations.join(", ")}`)
+  if (r.services.length)      lines.push(`⚙️ **Services:** ${r.services.join(", ")}`)
+  if (r.hasTransaction)        lines.push("⟲ **Transaction boundary**")
+
+  if (r.findings.length > 0) {
+    lines.push("", "---", "**Findings**")
+    for (const f of r.findings) {
+      const icon = SEVERITY_ICON[f.severity] ?? "⚪"
+      const doc  = FINDING_DOCS[f.type] ?? ""
+      lines.push(`\n${icon} **[${f.severity}] ${f.type}**`, `> ${f.summary}`)
+      if (doc) lines.push("", doc)
+    }
+  }
+
+  return { kind: "markdown" as const, value: lines.join("\n") }
 }
 
 documents.listen(connection)
