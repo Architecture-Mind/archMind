@@ -90,7 +90,7 @@ export function extractRoutes(options: RouteExtractorOptions): NestJSSemanticRou
           symbol: `${cls.getName() ?? "UnknownController"}::${method.getName()}`,
           controllerClass: cls.getName() ?? "UnknownController",
           file: filePath,
-          line: method.getStartLineNumber(),
+          line: method.getNameNode().getStartLineNumber(),
           guards,
           isPublic,
           validationPipe,
