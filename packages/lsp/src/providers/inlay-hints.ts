@@ -3,7 +3,7 @@ import type { RouteInfo } from "@archmind/protocol"
 
 export function buildInlayHints(routes: RouteInfo[]): InlayHint[] {
   return routes.map(route => ({
-    position:     { line: Math.max(0, route.line - 1), character: 10000 },
+    position:     { line: Math.max(0, route.line - 2), character: 10000 },
     label:        buildLabel(route),
     kind:         InlayHintKind.Parameter,
     paddingLeft:  true,

@@ -23,6 +23,8 @@ export class AnalysisService {
 
     const routes = graph.map(g => this.buildRoute(g))
     this.inferPublicRoutes(routes)
+    // Re-detect findings after isPublic is resolved — public routes should not fire missing_authorization
+    for (const r of routes) r.findings = detectFindings(r)
 
     const findings = routes.flatMap(r => r.findings)
     const indexes  = buildIndexes(graph, routes)
