@@ -1,3 +1,8 @@
+// Ensure stdio transport when spawned by editors that don't pass --stdio
+if (!process.argv.includes("--stdio") && !process.argv.includes("--node-ipc") && !process.argv.some(a => a.startsWith("--socket"))) {
+  process.argv.push("--stdio")
+}
+
 import {
   createConnection,
   TextDocuments,
