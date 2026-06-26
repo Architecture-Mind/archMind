@@ -13,7 +13,7 @@ export function buildInlayHints(routes: RouteInfo[]): InlayHint[] {
 }
 
 function buildLabel(r: RouteInfo): string {
-  const parts: string[] = [`${r.method} ${r.path}`]
+  const parts: string[] = []
 
   if (r.isPublic) {
     parts.push("🌐 public")
@@ -23,8 +23,8 @@ function buildLabel(r: RouteInfo): string {
     parts.push("⚠ no-auth")
   }
 
-  if (r.validations.length > 0) parts.push(`✓ ${r.validations[0]}`)
-  if (r.services.length > 0)    parts.push(`[${r.services.length} svc]`)
+  if (r.validations.length > 0) parts.push(`⓪ ${r.validations[0]}`)
+  if (r.services.length > 0)    parts.push(r.services.join(", "))
   if (r.hasTransaction)          parts.push("⟲ txn")
 
   const critical = r.findings.filter(f => f.severity === "CRITICAL" || f.severity === "HIGH")
