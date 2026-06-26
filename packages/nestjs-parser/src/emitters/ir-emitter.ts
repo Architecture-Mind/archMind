@@ -42,6 +42,7 @@ function emitGraph(
     symbol: route.symbol,
     role: "handler",
     file: route.file,
+    line: route.line,
   })
 
   // Validation gate — only when DTO is present + ValidationPipe active

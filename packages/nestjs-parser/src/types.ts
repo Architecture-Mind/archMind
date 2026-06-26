@@ -17,6 +17,7 @@ export interface NestJSSemanticRoute {
   symbol: string
   controllerClass: string
   file: string
+  line: number
   guards: GuardDescriptor[]
   isPublic: boolean
   validationPipe: boolean
