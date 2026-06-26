@@ -36,10 +36,12 @@ connection.onInitialize((_params: InitializeParams): InitializeResult => ({
   },
 }))
 
-// Trigger analysis on open
+// Trigger analysis on open — skip if already cached for this root
 documents.onDidOpen(async event => {
   const root = findProjectRoot(uriToFile(event.document.uri))
   if (!root) return
+  const ctx = manager.getOrCreate(root)
+  if (ctx.cache) return
   await runAnalysis(root, event.document.uri, event.document.version)
 })
 
@@ -59,11 +61,16 @@ connection.languages.inlayHint.on(async (params: InlayHintParams) => {
   const ctx = manager.get(root)
   if (!ctx?.cache) return []
 
-  // Resolve routes for this file using the index (O(1) lookup)
-  const relFile  = filePath.replace(root + "/", "").replace(root + "\\", "")
-  const routes   = ctx.cache.analysis.indexes.routesByFile.get(relFile)
-               ?? ctx.cache.analysis.indexes.routesByFile.get(filePath)
-               ?? []
+  // Normalize to forward slashes — parser stores paths with /, Windows uses \
+  const normalRoot = root.replace(/\\/g, "/")
+  const normalFile = filePath.replace(/\\/g, "/")
+  const relFile    = normalFile.replace(normalRoot, "").replace(/^\//, "")
+
+  const routes = ctx.cache.analysis.indexes.routesByFile.get(relFile)
+              ?? ctx.cache.analysis.indexes.routesByFile.get(normalFile)
+              ?? []
+
+  connection.console.log(`[archmind] inlayHint for ${relFile} → ${routes.length} routes`)
 
   return buildInlayHints(routes)
 })
@@ -87,6 +94,9 @@ async function runAnalysis(root: string, triggerUri: string, docVersion: number)
     }
 
     connection.console.log(`[archmind] found ${analysis.routes.length} routes`)
+    // Debug: show what file paths are indexed
+    const files = [...analysis.indexes.routesByFile.keys()]
+    connection.console.log(`[archmind] indexed files: ${files.join(", ")}`)
 
     // Notify client to refresh inlay hints for all open documents in this workspace
     connection.languages.inlayHint.refresh()
