@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.1] — 2026-06-26
+
+### Fixed
+
+- Picks up `laravel-parser@0.4.1` — aliased `use` imports (`use Foo\Bar as Baz`) now resolve to the correct FQCN, fixing namespace collisions in projects with multiple same-named controllers in different namespaces
+- Picks up `nestjs-parser@0.6.0` — `ir:api_resource` nodes now emitted for NestJS response DTOs (plainToInstance + return type annotation), with `@Expose/@Exclude` field extraction and sensitive field detection
+
+---
+
 ## [0.2.0] — 2026-06-11
 
 ### Added
