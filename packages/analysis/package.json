@@ -1,0 +1,44 @@
+{
+  "name": "@kidkender/archmind-analysis",
+  "version": "0.1.0",
+  "description": "Canonical analysis pipeline for ArchMind — parse project → RouteInfo[] with findings",
+  "type": "module",
+  "main": "./dist/analysis.cjs",
+  "exports": {
+    ".": "./dist/analysis.cjs"
+  },
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "tree-sitter": "^0.21.0",
+    "tree-sitter-php": "^0.23.0",
+    "ts-morph": "^23.0.0"
+  },
+  "devDependencies": {
+    "@kidkender/archmind-laravel-parser": "*",
+    "@kidkender/archmind-nestjs-parser": "*",
+    "@kidkender/archmind-protocol": "*",
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.4.0"
+  },
+  "files": [
+    "dist/analysis.cjs"
+  ],
+  "keywords": [
+    "laravel",
+    "nestjs",
+    "security",
+    "static-analysis",
+    "archmind"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Architecture-Mind/archMind.git"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

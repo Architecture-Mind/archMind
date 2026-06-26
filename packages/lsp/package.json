@@ -19,6 +19,7 @@
     "@archmind/laravel-parser": "*",
     "@archmind/nestjs-parser": "*",
     "@archmind/protocol": "*",
+    "@kidkender/archmind-analysis": "*",
     "@types/node": "^20.0.0",
     "esbuild": "^0.28.0",
     "typescript": "^5.4.0",
@@ -36,7 +37,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kidkender/archmind.git"
+    "url": "git+https://github.com/Architecture-Mind/archMind.git"
   },
   "engines": {
     "node": ">=18"
