@@ -1,6 +1,6 @@
 {
   "name": "@kidkender/archmind",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Execution topology intelligence for Laravel and NestJS — trace routes, detect regressions, find security gaps. No LLM required.",
   "type": "module",
   "bin": {
@@ -28,7 +28,13 @@
     "esbuild": "^0.28.0",
     "typescript": "^5.4.0"
   },
-  "keywords": ["laravel", "static-analysis", "security", "cli", "execution-graph"],
+  "keywords": [
+    "laravel",
+    "static-analysis",
+    "security",
+    "cli",
+    "execution-graph"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -36,6 +42,9 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist/index.cjs",

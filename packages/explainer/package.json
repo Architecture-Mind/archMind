@@ -1,23 +1,52 @@
 {
   "name": "@kidkender/archmind-explainer",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "description": "Explanation engine for ArchMind — fact extraction, pattern detection, evidence packaging, and finding ranking for Laravel/NestJS execution graphs.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "!dist/__tests__",
+    "!dist/__tests__/**",
+    "!dist/benchmark",
+    "!dist/benchmark/**"
+  ],
   "scripts": {
     "build": "node -e \"try{require('fs').rmSync('dist',{recursive:true,force:true})}catch(e){}\" && tsc",
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js"
   },
   "dependencies": {
-    "@archmind/protocol": "*",
-    "@archmind/scorer": "*"
+    "@archmind/protocol": "npm:@kidkender/archmind-protocol@^0.2.1"
   },
   "devDependencies": {
     "@archmind/laravel-parser": "*",
+    "@archmind/scorer": "*",
     "@types/jest": "^29.5.0",
     "@types/node": "^20.0.0",
     "jest": "^29.0.0",
     "ts-jest": "^29.0.0",
     "typescript": "^5.4.0"
+  },
+  "keywords": [
+    "archmind",
+    "laravel",
+    "nestjs",
+    "security",
+    "static-analysis",
+    "execution-graph",
+    "explanation"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Architecture-Mind/ArchMind",
+    "directory": "packages/explainer"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
