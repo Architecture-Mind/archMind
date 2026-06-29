@@ -70,15 +70,16 @@ function unwrapPromise(typeText: string): string {
 // ─── Class scanning ───────────────────────────────────────────────────────────
 
 function scanResponseClass(project: Project, projectRoot: string, className: string): ResponseField[] {
-  // Lazily add DTO/Resource/Response source files
-  const dtoPaths = [
-    path.join(projectRoot, "**/*.dto.ts").replace(/\\/g, "/"),
-    path.join(projectRoot, "**/*.response.ts").replace(/\\/g, "/"),
-    path.join(projectRoot, "**/*.resource.ts").replace(/\\/g, "/"),
-  ]
-  for (const p of dtoPaths) {
-    if (!project.getSourceFiles().some(sf => sf.getFilePath().includes(".dto.") || sf.getFilePath().includes(".response.") || sf.getFilePath().includes(".resource."))) {
-      try { project.addSourceFilesAtPaths(p) } catch { /* ignore */ }
+  // Lazily add DTO/Resource/Response source files — guard per suffix so that
+  // having .dto.ts files does not block .response.ts and .resource.ts from loading.
+  const dtoSuffixes = [".dto.", ".response.", ".resource."] as const
+  const dtoPaths = dtoSuffixes.map(s =>
+    path.join(projectRoot, `**/*${s}ts`).replace(/\\/g, "/")
+  )
+  for (let i = 0; i < dtoPaths.length; i++) {
+    const suffix = dtoSuffixes[i]
+    if (!project.getSourceFiles().some(sf => sf.getFilePath().includes(suffix))) {
+      try { project.addSourceFilesAtPaths(dtoPaths[i]) } catch { /* ignore */ }
     }
   }
 

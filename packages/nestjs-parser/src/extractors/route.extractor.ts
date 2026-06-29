@@ -23,21 +23,32 @@ export interface RouteExtractorOptions {
   tsConfigPath?: string
   customDecorators?: CustomDecoratorRegistry
   userConfig?: ArchMindUserConfig
+  // When provided, skip Project creation and addSourceFilesAtPaths — caller is responsible
+  // for refreshing changed files before calling.
+  project?: Project
+}
+
+export function createNestProject(): Project {
+  return new Project({
+    skipAddingFilesFromTsConfig: true,
+    skipFileDependencyResolution: true,
+    compilerOptions: { allowJs: true, noEmit: true, skipLibCheck: true, strict: false },
+  })
 }
 
 export function extractRoutes(options: RouteExtractorOptions): NestJSSemanticRoute[] {
   const { projectRoot, userConfig } = options
   const customDecorators = options.customDecorators ?? scanCustomDecorators(projectRoot, userConfig)
 
-  const project = new Project({
-    skipAddingFilesFromTsConfig: true,
-    skipFileDependencyResolution: true,
-    compilerOptions: { allowJs: true, noEmit: true, skipLibCheck: true, strict: false },
-  })
-
-  project.addSourceFilesAtPaths(
-    path.join(projectRoot, "**/*.controller.ts").replace(/\\/g, "/")
-  )
+  let project: Project
+  if (options.project) {
+    project = options.project
+  } else {
+    project = createNestProject()
+    project.addSourceFilesAtPaths(
+      path.join(projectRoot, "**/*.controller.ts").replace(/\\/g, "/")
+    )
+  }
 
   const routes: NestJSSemanticRoute[] = []
 

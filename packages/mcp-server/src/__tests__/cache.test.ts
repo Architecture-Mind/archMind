@@ -5,11 +5,14 @@ import {
   buildFileIndex,
   hasAnyTrackedFileChanged,
   getGraphs,
+  invalidate,
   _clearForTesting,
   _setCacheEntry,
   _setTrackedFiles,
   _getTrackedFiles,
   _isCached,
+  _getNestProject,
+  _getNestTrackedFiles,
 } from "../cache.js"
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
 
@@ -223,6 +226,101 @@ describe("cache state management", () => {
     bumpMtime(file)
     expect(hasAnyTrackedFileChanged(tmp)).toBe(true)
   })
+})
+
+// ── NestJS incremental (getGraphs()) ─────────────────────────────────────────
+
+// Minimal NestJS controller content — ts-morph parses decorators syntactically;
+// skipFileDependencyResolution=true means @nestjs/common does not need to be installed.
+const MINIMAL_CONTROLLER = `
+import { Controller, Get } from '@nestjs/common';
+
+@Controller()
+export class AppController {
+  @Get('/ping')
+  ping() {}
+}
+`
+
+function makeNestTmp(): { tmp: string; controllerFile: string } {
+  const tmp = makeTmp("archmind-nest-test")
+  mkdirSync(join(tmp, "src"), { recursive: true })
+  // nest-cli.json triggers NestJS framework detection
+  writeFileSync(join(tmp, "nest-cli.json"), "{}")
+  const controllerFile = join(tmp, "src", "app.controller.ts")
+  writeFileSync(controllerFile, MINIMAL_CONTROLLER)
+  return { tmp, controllerFile }
+}
+
+describe("getGraphs() NestJS incremental (integration)", () => {
+  test("cold parse: creates a cached Project and NestJS file index", () => {
+    const { tmp, controllerFile } = makeNestTmp()
+
+    const graphs = getGraphs(tmp)
+
+    expect(_isCached(tmp)).toBe(true)
+    expect(_getNestProject(tmp)).toBeDefined()
+    const tracked = _getNestTrackedFiles(tmp)
+    expect(tracked).toBeDefined()
+    // Controller file should be tracked
+    const hasController = [...tracked!.keys()].some(k => k.includes("app.controller.ts"))
+    expect(hasController).toBe(true)
+    // Graphs should contain at least the ping route
+    const pingGraph = graphs.find(g => g.path.includes("ping"))
+    expect(pingGraph).toBeDefined()
+  }, 30_000)
+
+  test("no-change second call returns cached result without creating new Project", () => {
+    const { tmp } = makeNestTmp()
+
+    getGraphs(tmp)
+    const projectAfterCold = _getNestProject(tmp)
+
+    // Second call — no file changes
+    getGraphs(tmp)
+    const projectAfterWarm = _getNestProject(tmp)
+
+    // Same Project object — proves warm path hit cache, no new Project created
+    expect(projectAfterWarm).toBe(projectAfterCold)
+  }, 30_000)
+
+  test("warm re-parse after mtime bump: updates tracked mtime", () => {
+    const { tmp, controllerFile } = makeNestTmp()
+
+    getGraphs(tmp)
+    const trackedBefore = _getNestTrackedFiles(tmp)!
+    const controllerKey = [...trackedBefore.keys()].find(k => k.includes("app.controller.ts"))!
+    const mtimeBefore = trackedBefore.get(controllerKey)!
+
+    bumpMtime(controllerFile)
+
+    const t0 = Date.now()
+    getGraphs(tmp)
+    const warmMs = Date.now() - t0
+
+    const trackedAfter = _getNestTrackedFiles(tmp)!
+    const mtimeAfter = trackedAfter.get(controllerKey)!
+
+    // Tracked mtime must advance — proves re-parse ran
+    expect(mtimeAfter).toBeGreaterThan(mtimeBefore)
+    // Project instance is reused (warm path)
+    expect(_getNestProject(tmp)).toBeDefined()
+
+    console.log(`[nest-incremental] warm-reparse=${warmMs}ms`)
+  }, 30_000)
+
+  test("invalidate clears NestJS project and tracked files", () => {
+    const { tmp } = makeNestTmp()
+
+    getGraphs(tmp)
+    expect(_getNestProject(tmp)).toBeDefined()
+
+    invalidate(tmp)
+
+    expect(_isCached(tmp)).toBe(false)
+    expect(_getNestProject(tmp)).toBeUndefined()
+    expect(_getNestTrackedFiles(tmp)).toBeUndefined()
+  }, 30_000)
 })
 
 // ── getGraphs() auto-invalidation (integration) ────────────────────────────

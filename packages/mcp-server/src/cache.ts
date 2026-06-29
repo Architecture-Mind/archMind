@@ -1,14 +1,20 @@
 import { parseRouteFile, augmentGraph, loadProjectConfig, resolveAliasMap, ParseCache } from "@archmind/laravel-parser"
-import { parseNestJSProject } from "@archmind/nestjs-parser"
+import { parseNestJSProjectIncremental, createNestProject } from "@archmind/nestjs-parser"
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import { join } from "path"
-import { existsSync, statSync } from "fs"
+import { join, relative } from "path"
+import { existsSync, statSync, readdirSync } from "fs"
+import { Project } from "ts-morph"
 
 const cache        = new Map<string, IntermediateExecutionGraph[]>()
 const parseCaches  = new Map<string, ParseCache<unknown>>()
 // Laravel only: relPath → last-seen mtimeMs, rebuilt after each parse.
 // Used to auto-invalidate the graph cache when source files change.
 const trackedFiles = new Map<string, Map<string, number>>()
+// NestJS: one cached ts-morph Project per projectRoot.  Kept alive across
+// calls so SourceFiles remain parsed in memory; only changed files are refreshed.
+const nestProjects     = new Map<string, Project>()
+// NestJS: relPath → last-seen mtimeMs (*.controller.ts files + archmind.json).
+const nestTrackedFiles = new Map<string, Map<string, number>>()
 
 export type Framework = "laravel" | "nestjs"
 
@@ -68,7 +74,119 @@ export function hasAnyTrackedFileChanged(projectRoot: string): boolean {
   return false
 }
 
+// ── NestJS incremental helpers ────────────────────────────────────────────────
+
+// Recursively find files matching a predicate, skipping node_modules and hidden dirs.
+function findFiles(dir: string, predicate: (name: string) => boolean, results: string[] = []): string[] {
+  try {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const child = join(dir, entry.name)
+      if (entry.isDirectory() && entry.name !== "node_modules" && !entry.name.startsWith(".")) {
+        findFiles(child, predicate, results)
+      } else if (entry.isFile() && predicate(entry.name)) {
+        results.push(child)
+      }
+    }
+  } catch { /* skip unreadable dirs */ }
+  return results
+}
+
+function buildNestFileIndex(project: Project, projectRoot: string): Map<string, number> {
+  const index = new Map<string, number>()
+
+  // Controller and DTO files already in the ts-morph Project.
+  for (const sf of project.getSourceFiles()) {
+    const absPath = sf.getFilePath()
+    const rel = relative(projectRoot, absPath).replace(/\\/g, "/")
+    const mtime = statMtime(absPath)
+    if (mtime !== null) index.set(rel, mtime)
+  }
+
+  // Module files are NOT in the Project (no parsing needed) but guard/middleware
+  // configs live in *.module.ts — track their mtimes so changes trigger re-parse.
+  for (const absPath of findFiles(projectRoot, n => n.endsWith(".module.ts"))) {
+    const rel = relative(projectRoot, absPath).replace(/\\/g, "/")
+    const mtime = statMtime(absPath)
+    if (mtime !== null) index.set(rel, mtime)
+  }
+
+  if (existsSync(join(projectRoot, "archmind.json"))) {
+    const mtime = statMtime(join(projectRoot, "archmind.json"))
+    if (mtime !== null) index.set("archmind.json", mtime)
+  }
+
+  return index
+}
+
+function hasNestTrackedFileChanged(projectRoot: string): boolean {
+  const index = nestTrackedFiles.get(projectRoot)
+  if (!index) return false
+  for (const [rel, lastMtime] of index) {
+    const current = statMtime(join(projectRoot, rel))
+    if (current === null || current !== lastMtime) return true
+  }
+  return false
+}
+
+// Update the cached Project to reflect file-system changes: adds new controllers
+// and DTO files, refreshes edited ones, removes deleted ones.
+// Must be called before extractRoutes.
+function refreshNestProject(project: Project, projectRoot: string): void {
+  const globs = [
+    "**/*.controller.ts",
+    "**/*.dto.ts",
+    "**/*.response.ts",
+    "**/*.resource.ts",
+  ].map(g => join(projectRoot, g).replace(/\\/g, "/"))
+
+  // addSourceFilesAtPaths is idempotent for already-loaded files; only adds new ones.
+  project.addSourceFilesAtPaths(globs)
+
+  // Snapshot to avoid mutating the collection while iterating.
+  const sourceFiles = project.getSourceFiles()
+  for (const sf of sourceFiles) {
+    const absPath = sf.getFilePath()
+    if (!existsSync(absPath)) {
+      project.removeSourceFile(sf)
+    } else {
+      sf.refreshFromFileSystemSync()
+    }
+  }
+}
+
 export function getGraphs(projectRoot: string): IntermediateExecutionGraph[] {
+  const framework = detectFramework(projectRoot)
+
+  if (framework === "nestjs") {
+    // Auto-invalidate if tracked controller/config files changed.
+    // Keep nestProjects alive — the cached Project will be refreshed below.
+    if (cache.has(projectRoot) && hasNestTrackedFileChanged(projectRoot)) {
+      cache.delete(projectRoot)
+    }
+
+    if (cache.has(projectRoot)) return cache.get(projectRoot)!
+
+    let project = nestProjects.get(projectRoot)
+
+    if (!project) {
+      // Cold parse: create Project, load all controller files, parse.
+      project = createNestProject()
+      project.addSourceFilesAtPaths(
+        join(projectRoot, "**/*.controller.ts").replace(/\\/g, "/")
+      )
+      nestProjects.set(projectRoot, project)
+    } else {
+      // Warm re-parse: refresh changed/new/deleted files, then re-extract.
+      refreshNestProject(project, projectRoot)
+    }
+
+    const graphs = parseNestJSProjectIncremental(projectRoot, project)
+    nestTrackedFiles.set(projectRoot, buildNestFileIndex(project, projectRoot))
+    cache.set(projectRoot, graphs)
+    return graphs
+  }
+
+  // Laravel path
   // Auto-invalidate if any tracked file changed since the last parse.
   // Only drop the top-level cache, not parseCaches — content-hash keying means
   // changed files get new hash keys (miss) while unchanged files get hits (warm).
@@ -76,42 +194,30 @@ export function getGraphs(projectRoot: string): IntermediateExecutionGraph[] {
     cache.delete(projectRoot)
   }
 
-  if (cache.has(projectRoot)) {
-    return cache.get(projectRoot)!
+  if (cache.has(projectRoot)) return cache.get(projectRoot)!
+
+  if (!parseCaches.has(projectRoot)) {
+    parseCaches.set(projectRoot, new ParseCache<unknown>())
+  }
+  const parseCache = parseCaches.get(projectRoot)!
+
+  const config = loadProjectConfig(projectRoot)
+  const resolved = resolveAliasMap(projectRoot, config)
+  const routeFiles = resolved.routeFiles
+  const { aliasMap } = resolved
+
+  const graphs: IntermediateExecutionGraph[] = []
+  for (const relRouteFile of routeFiles) {
+    const routesFile = join(projectRoot, relRouteFile)
+    const skeletons = parseRouteFile(routesFile, { aliasMap })
+    for (const g of skeletons) {
+      graphs.push(augmentGraph(g, { projectRoot, config, cache: parseCache }))
+    }
   }
 
-  const framework = detectFramework(projectRoot)
-  let graphs: IntermediateExecutionGraph[]
-  let routeFiles: string[] = []
-
-  if (framework === "nestjs") {
-    // NestJS: ts-morph load dominates; incremental deferred to a later phase.
-    graphs = parseNestJSProject(projectRoot)
-  } else {
-    if (!parseCaches.has(projectRoot)) {
-      parseCaches.set(projectRoot, new ParseCache<unknown>())
-    }
-    const parseCache = parseCaches.get(projectRoot)!
-
-    const config = loadProjectConfig(projectRoot)
-    const resolved = resolveAliasMap(projectRoot, config)
-    routeFiles = resolved.routeFiles
-    const { aliasMap } = resolved
-
-    graphs = []
-    for (const relRouteFile of routeFiles) {
-      const routesFile = join(projectRoot, relRouteFile)
-      const skeletons = parseRouteFile(routesFile, { aliasMap })
-      for (const g of skeletons) {
-        graphs.push(augmentGraph(g, { projectRoot, config, cache: parseCache }))
-      }
-    }
-
-    // Record mtimes for all files that contributed to this parse so we can
-    // detect changes on the next call without an explicit invalidate_cache.
-    trackedFiles.set(projectRoot, buildFileIndex(graphs, projectRoot, routeFiles))
-  }
-
+  // Record mtimes for all files that contributed to this parse so we can
+  // detect changes on the next call without an explicit invalidate_cache.
+  trackedFiles.set(projectRoot, buildFileIndex(graphs, projectRoot, routeFiles))
   cache.set(projectRoot, graphs)
   return graphs
 }
@@ -119,6 +225,8 @@ export function getGraphs(projectRoot: string): IntermediateExecutionGraph[] {
 export function invalidate(projectRoot: string): void {
   cache.delete(projectRoot)
   trackedFiles.delete(projectRoot)
+  nestProjects.delete(projectRoot)
+  nestTrackedFiles.delete(projectRoot)
   // Don't clear parseCaches — content-hash keying means a changed file produces
   // a new hash (miss) while unchanged files stay warm. Clearing would only slow
   // the next full re-parse without gaining correctness.
@@ -130,6 +238,8 @@ export function _clearForTesting(): void {
   cache.clear()
   parseCaches.clear()
   trackedFiles.clear()
+  nestProjects.clear()
+  nestTrackedFiles.clear()
 }
 
 export function _setCacheEntry(projectRoot: string, graphs: IntermediateExecutionGraph[]): void {
@@ -146,4 +256,12 @@ export function _getTrackedFiles(projectRoot: string): Map<string, number> | und
 
 export function _isCached(projectRoot: string): boolean {
   return cache.has(projectRoot)
+}
+
+export function _getNestProject(projectRoot: string): Project | undefined {
+  return nestProjects.get(projectRoot)
+}
+
+export function _getNestTrackedFiles(projectRoot: string): Map<string, number> | undefined {
+  return nestTrackedFiles.get(projectRoot)
 }

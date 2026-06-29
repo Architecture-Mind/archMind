@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "fs"
 import { join } from "path"
 import type { IntermediateExecutionGraph, ArchMindUserConfig } from "@kidkender/archmind-protocol"
 import type { SemanticAdapter } from "@kidkender/archmind-protocol"
+import type { Project } from "ts-morph"
 import { extractRoutes } from "./extractors/route.extractor.js"
 import { emitGraphs } from "./emitters/ir-emitter.js"
 import { scanGlobalPipes } from "./resolvers/global.resolver.js"
@@ -78,4 +79,31 @@ function applyMiddleware(
 
 export function parseNestJSProject(root: string): IntermediateExecutionGraph[] {
   return new NestJSAdapter().parseProject(root)
+}
+
+// Warm re-parse path: accepts a cached ts-morph Project whose SourceFiles have
+// already been refreshed by the caller.  Runs all other scanners fresh (module
+// guards, middleware, DTOs) because those are cheap file reads.
+export function parseNestJSProjectIncremental(
+  root: string,
+  project: Project,
+): IntermediateExecutionGraph[] {
+  const userConfig    = loadUserConfig(root)
+  const globalPipes   = scanGlobalPipes(root)
+  const globalGuards  = scanGlobalGuards(root, userConfig)
+  const middlewareMap = scanMiddleware(root, userConfig)
+  const routes = extractRoutes({ projectRoot: root, userConfig, project })
+
+  let dtoIndex = new Map<string, DTOSchema>()
+  try { dtoIndex = parseDTOSchemas(root).index } catch { /* skip on parse error */ }
+
+  const withGlobalGuards = globalGuards.length === 0
+    ? routes
+    : routes.map(r => r.isPublic ? r : { ...r, guards: [...globalGuards, ...r.guards] })
+
+  const withMiddleware = middlewareMap.size === 0
+    ? withGlobalGuards
+    : withGlobalGuards.map(r => applyMiddleware(r, middlewareMap))
+
+  return emitGraphs(withMiddleware, globalPipes, dtoIndex)
 }
