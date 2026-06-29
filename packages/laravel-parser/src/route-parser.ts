@@ -308,7 +308,19 @@ function buildGraph(
     edges.push({ from: nodes[i].id, to: nodes[i + 1].id, relation: "next_middleware", traceability: "static" })
   }
 
-  return { entrypoint: `${method} ${path}`, method, path, nodes, edges, annotations: [] }
+  return {
+    entrypoint: `${method} ${path}`,
+    method,
+    path,
+    source: {
+      type: "http",
+      id: `${method} ${path}`,
+      metadata: { method, path },
+    },
+    nodes,
+    edges,
+    annotations: [],
+  }
 }
 
 // ---- AST helpers ------------------------------------------------------

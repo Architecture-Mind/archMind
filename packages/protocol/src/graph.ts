@@ -77,10 +77,21 @@ export interface GraphAnnotation {
   evidence?:   string[]
 }
 
+// Describes the execution entrypoint in a framework-agnostic way.
+// `type` is a free string (not a union) — the ontology is still being discovered.
+// HTTP example:  { type: "http",  id: "POST /orders",     metadata: { method: "POST", path: "/orders" } }
+// Queue example: { type: "queue", id: "ProcessOrderJob",  metadata: { queue: "orders", job: "ProcessOrderJob" } }
+export interface EntrypointDescriptor {
+  type:     string                    // "http" | "queue" | "event" | "cron" | "kafka" | ...
+  id:       string                    // canonical identifier — matches graph.entrypoint for HTTP graphs
+  metadata: Record<string, string>    // type-specific fields
+}
+
 export interface IntermediateExecutionGraph {
-  entrypoint:   string            // e.g. "PUT /tasks/{id}"
+  entrypoint:   string            // e.g. "PUT /tasks/{id}" — canonical string key, stable
   method:       string            // "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
   path:         string            // e.g. "/tasks/{id}"
+  source?:      EntrypointDescriptor  // structured entrypoint; absent only in legacy/test graphs
   nodes:        ExecutionNode[]
   edges:        ExecutionEdge[]
   annotations:  GraphAnnotation[]

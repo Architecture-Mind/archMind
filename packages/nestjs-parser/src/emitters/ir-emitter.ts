@@ -188,6 +188,11 @@ function emitGraph(
     entrypoint: `${route.method} ${route.path}`,
     method: route.method,
     path: route.path,
+    source: {
+      type: "http",
+      id: `${route.method} ${route.path}`,
+      metadata: { method: route.method, path: route.path },
+    },
     nodes,
     edges,
     annotations: [],
