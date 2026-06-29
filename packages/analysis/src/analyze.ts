@@ -1,11 +1,22 @@
 import { existsSync, readFileSync } from "fs"
 import { join } from "path"
-import type { RouteInfo } from "@kidkender/archmind-protocol"
+import type { RouteInfo, ArchMindUserConfig } from "@kidkender/archmind-protocol"
 import { detectFindings } from "./detect.js"
+
+function loadUserConfig(projectRoot: string): ArchMindUserConfig | undefined {
+  const configPath = join(projectRoot, "archmind.json")
+  if (!existsSync(configPath)) return undefined
+  try {
+    return JSON.parse(readFileSync(configPath, "utf-8")) as ArchMindUserConfig
+  } catch {
+    return undefined
+  }
+}
 
 const THROTTLE_RE = /throttl|ratelimit|rate.?limit/i
 
 export async function analyzeProject(projectRoot: string): Promise<RouteInfo[]> {
+  const userConfig = loadUserConfig(projectRoot)
   // Dynamic require keeps tree-sitter native addon under system Node ABI.
   // Must not be a static import — esbuild would try to inline the native .node binary.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -16,12 +27,12 @@ export async function analyzeProject(projectRoot: string): Promise<RouteInfo[]> 
   const isNestJS = existsSync(join(projectRoot, "nest-cli.json"))
 
   if (isNestJS) {
-    return analyzeNestJS(projectRoot, nestjsParser)
+    return analyzeNestJS(projectRoot, nestjsParser, userConfig)
   }
-  return analyzeLaravel(projectRoot, laravelParser)
+  return analyzeLaravel(projectRoot, laravelParser, userConfig)
 }
 
-async function analyzeLaravel(projectRoot: string, parser: any): Promise<RouteInfo[]> {
+async function analyzeLaravel(projectRoot: string, parser: any, userConfig?: ArchMindUserConfig): Promise<RouteInfo[]> {
   const { loadProjectConfig, resolveAliasMap, parseRouteFile, augmentGraph } = parser
 
   const config = loadProjectConfig(projectRoot)
@@ -35,7 +46,7 @@ async function analyzeLaravel(projectRoot: string, parser: any): Promise<RouteIn
         const graph   = await augmentGraph(skeleton, { projectRoot, config })
         const handler = graph.nodes.find((n: any) => n.type === "ir:business_handler")
         if (!handler) continue
-        routes.push(buildRoute(graph, handler, "laravel", projectRoot))
+        routes.push(buildRoute(graph, handler, "laravel", projectRoot, userConfig))
       } catch { /* skip unparseable route */ }
     }
   }
@@ -43,7 +54,7 @@ async function analyzeLaravel(projectRoot: string, parser: any): Promise<RouteIn
   return routes
 }
 
-function analyzeNestJS(projectRoot: string, parser: any): RouteInfo[] {
+function analyzeNestJS(projectRoot: string, parser: any, userConfig?: ArchMindUserConfig): RouteInfo[] {
   const { parseNestJSProject } = parser
   const graphs = parseNestJSProject(projectRoot) as any[]
   const routes: RouteInfo[] = []
@@ -52,7 +63,7 @@ function analyzeNestJS(projectRoot: string, parser: any): RouteInfo[] {
     const handler = graph.nodes.find((n: any) => n.type === "ir:business_handler")
     if (!handler) continue
     try {
-      routes.push(buildRoute(graph, handler, "nestjs", projectRoot))
+      routes.push(buildRoute(graph, handler, "nestjs", projectRoot, userConfig))
     } catch { /* skip */ }
   }
 
@@ -62,7 +73,7 @@ function analyzeNestJS(projectRoot: string, parser: any): RouteInfo[] {
   inferPublicRoutes(routes)
 
   // Re-run findings after isPublic is set so public routes don't trigger findings.
-  return routes.map(r => ({ ...r, findings: detectFindings(r) }))
+  return routes.map(r => ({ ...r, findings: detectFindings(r, userConfig) }))
 }
 
 function inferPublicRoutes(routes: RouteInfo[]): void {
@@ -73,7 +84,7 @@ function inferPublicRoutes(routes: RouteInfo[]): void {
   }
 }
 
-function buildRoute(graph: any, handler: any, framework: string, projectRoot?: string): RouteInfo {
+function buildRoute(graph: any, handler: any, framework: string, projectRoot?: string, userConfig?: ArchMindUserConfig): RouteInfo {
   const authGates   = graph.nodes.filter((n: any) => n.type === "ir:auth_gate").map((n: any) => n.symbol as string)
   const authzChecks = graph.nodes.filter((n: any) => n.type === "ir:authz_check").map((n: any) => {
     const args = n.args?.length ? `:${(n.args as string[]).join(",")}` : ""
@@ -106,7 +117,7 @@ function buildRoute(graph: any, handler: any, framework: string, projectRoot?: s
     isPublic:       false,
   }
 
-  return { ...partial, findings: detectFindings(partial) }
+  return { ...partial, findings: detectFindings(partial, userConfig) }
 }
 
 function resolveHandlerLine(handler: any, projectRoot?: string): number {

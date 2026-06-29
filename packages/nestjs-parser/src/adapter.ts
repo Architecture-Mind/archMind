@@ -1,4 +1,6 @@
-import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
+import { existsSync, readFileSync } from "fs"
+import { join } from "path"
+import type { IntermediateExecutionGraph, ArchMindUserConfig } from "@kidkender/archmind-protocol"
 import type { SemanticAdapter } from "@kidkender/archmind-protocol"
 import { extractRoutes } from "./extractors/route.extractor.js"
 import { emitGraphs } from "./emitters/ir-emitter.js"
@@ -10,12 +12,23 @@ import type { NestJSSemanticRoute } from "./types.js"
 import type { GuardDescriptor } from "./types.js"
 import type { DTOSchema } from "@kidkender/archmind-protocol"
 
+function loadUserConfig(projectRoot: string): ArchMindUserConfig | undefined {
+  const configPath = join(projectRoot, "archmind.json")
+  if (!existsSync(configPath)) return undefined
+  try {
+    return JSON.parse(readFileSync(configPath, "utf-8")) as ArchMindUserConfig
+  } catch {
+    return undefined
+  }
+}
+
 export class NestJSAdapter implements SemanticAdapter {
   parseProject(root: string): IntermediateExecutionGraph[] {
+    const userConfig    = loadUserConfig(root)
     const globalPipes   = scanGlobalPipes(root)
-    const globalGuards  = scanGlobalGuards(root)
-    const middlewareMap = scanMiddleware(root)
-    const routes = extractRoutes({ projectRoot: root })
+    const globalGuards  = scanGlobalGuards(root, userConfig)
+    const middlewareMap = scanMiddleware(root, userConfig)
+    const routes = extractRoutes({ projectRoot: root, userConfig })
 
     // Build DTO schema index — enriches validation_gate nodes with field detail
     let dtoIndex = new Map<string, DTOSchema>()

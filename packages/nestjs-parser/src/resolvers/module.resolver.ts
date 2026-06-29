@@ -2,11 +2,12 @@ import { readdirSync, readFileSync } from "fs"
 import path from "path"
 import type { GuardDescriptor } from "../types.js"
 import { classifyGuard } from "./guard.classifier.js"
+import type { ArchMindUserConfig } from "@kidkender/archmind-protocol"
 
 // Scan all *.module.ts files under projectRoot for APP_GUARD token providers.
 // Pattern: { provide: APP_GUARD, useClass: SomeGuard } in any order.
 // APP_PIPE is a known gap — deferred to Phase 3.
-export function scanGlobalGuards(projectRoot: string): GuardDescriptor[] {
+export function scanGlobalGuards(projectRoot: string, userConfig?: ArchMindUserConfig): GuardDescriptor[] {
   const moduleFiles = findModuleFiles(projectRoot)
   const seen = new Set<string>()
   const guards: GuardDescriptor[] = []
@@ -18,7 +19,7 @@ export function scanGlobalGuards(projectRoot: string): GuardDescriptor[] {
     for (const className of extractAppGuardClasses(text)) {
       if (seen.has(className)) continue
       seen.add(className)
-      guards.push({ className, args: [], irType: classifyGuard(className) })
+      guards.push({ className, args: [], irType: classifyGuard(className, userConfig) })
     }
   }
 

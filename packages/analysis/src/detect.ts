@@ -1,8 +1,12 @@
-import type { RouteInfo, FindingInfo } from "@kidkender/archmind-protocol"
+import type { RouteInfo, FindingInfo, ArchMindUserConfig } from "@kidkender/archmind-protocol"
+import { MUTATION_METHODS } from "@kidkender/archmind-protocol"
 
-const MUTATION = ["POST", "PUT", "PATCH", "DELETE"]
+const DEFAULT_CREDENTIAL_RE = /login|signin|auth|token|password/i
 
-export function detectFindings(route: Omit<RouteInfo, "findings">): FindingInfo[] {
+export function detectFindings(
+  route: Omit<RouteInfo, "findings">,
+  userConfig?: ArchMindUserConfig
+): FindingInfo[] {
   const { method, path, authGates, authzChecks, services, symbol, isPublic, throttled } = route
 
   if (isPublic) return []
@@ -10,7 +14,7 @@ export function detectFindings(route: Omit<RouteInfo, "findings">): FindingInfo[
   const findings: FindingInfo[] = []
 
   // 1. broken_access_control — mutation with NO auth whatsoever (CRITICAL)
-  if (MUTATION.includes(method) && authGates.length === 0 && authzChecks.length === 0) {
+  if (MUTATION_METHODS.has(method) && authGates.length === 0 && authzChecks.length === 0) {
     findings.push({
       type:     "broken_access_control",
       severity: "CRITICAL",
@@ -19,7 +23,7 @@ export function detectFindings(route: Omit<RouteInfo, "findings">): FindingInfo[
   }
 
   // 2. missing_authorization — authenticated but no role/ownership check (HIGH)
-  if (MUTATION.includes(method) && authGates.length > 0 && authzChecks.length === 0) {
+  if (MUTATION_METHODS.has(method) && authGates.length > 0 && authzChecks.length === 0) {
     findings.push({
       type:     "missing_authorization",
       severity: "HIGH",
@@ -36,9 +40,14 @@ export function detectFindings(route: Omit<RouteInfo, "findings">): FindingInfo[
     })
   }
 
-  // 4. no_rate_limiting — unprotected POST matching auth-endpoint path patterns (HIGH)
+  // 4. no_rate_limiting — unprotected POST matching credential endpoint path patterns (HIGH).
+  // Path matching is a heuristic: graph-based credential detection requires DTO field extraction
+  // (not yet in RouteInfo). Patterns are configurable via archmind.json `credentialPaths`.
   if (!throttled && authGates.length === 0 && method === "POST") {
-    if (/login|signin|auth|token|password/i.test(path)) {
+    const credentialRe = userConfig?.credentialPaths?.length
+      ? new RegExp(userConfig.credentialPaths.join("|"), "i")
+      : DEFAULT_CREDENTIAL_RE
+    if (credentialRe.test(path)) {
       findings.push({
         type:     "no_rate_limiting",
         severity: "HIGH",

@@ -1,11 +1,9 @@
 import type { SemanticFact, AuthorizationCheckFact } from "../fact-extraction/types.js"
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import { IR_NODE_TYPES } from "@archmind/protocol"
+import { IR_NODE_TYPES, MUTATION_METHODS } from "@archmind/protocol"
 import type { Finding, Evidence } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
-
-const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
 
 /**
  * Detects mutation routes (POST/PUT/PATCH/DELETE) that have an authentication

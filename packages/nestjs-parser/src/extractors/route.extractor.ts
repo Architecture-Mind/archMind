@@ -11,6 +11,7 @@ import { extractTransactions } from "./transaction.extractor.js"
 import { extractResponseResource } from "./response.extractor.js"
 import { scanCustomDecorators } from "../resolvers/decorator.scanner.js"
 import type { CustomDecoratorRegistry } from "../resolvers/decorator.scanner.js"
+import type { ArchMindUserConfig } from "@kidkender/archmind-protocol"
 
 const HTTP_METHOD_MAP: Record<string, string> = {
   Get: "GET", Post: "POST", Put: "PUT", Delete: "DELETE",
@@ -21,11 +22,12 @@ export interface RouteExtractorOptions {
   projectRoot: string
   tsConfigPath?: string
   customDecorators?: CustomDecoratorRegistry
+  userConfig?: ArchMindUserConfig
 }
 
 export function extractRoutes(options: RouteExtractorOptions): NestJSSemanticRoute[] {
-  const { projectRoot } = options
-  const customDecorators = options.customDecorators ?? scanCustomDecorators(projectRoot)
+  const { projectRoot, userConfig } = options
+  const customDecorators = options.customDecorators ?? scanCustomDecorators(projectRoot, userConfig)
 
   const project = new Project({
     skipAddingFilesFromTsConfig: true,
@@ -50,7 +52,7 @@ export function extractRoutes(options: RouteExtractorOptions): NestJSSemanticRou
 
       const { prefix, version: ctrlVersion } = resolveControllerDecArgs(controllerDec)
       const controllerGuards = [
-        ...extractGuards(cls.getDecorators()),
+        ...extractGuards(cls.getDecorators(), userConfig),
         ...extractCustomDecoratorGuards(cls.getDecorators(), customDecorators),
       ]
       const controllerIsPublic = Boolean(cls.getDecorator("Public"))
@@ -69,7 +71,7 @@ export function extractRoutes(options: RouteExtractorOptions): NestJSSemanticRou
         const isPublic = controllerIsPublic || methodIsPublic
 
         const methodGuards = [
-          ...extractGuards(method.getDecorators()),
+          ...extractGuards(method.getDecorators(), userConfig),
           ...extractCustomDecoratorGuards(method.getDecorators(), customDecorators),
         ]
         // @Public() suppresses guard inheritance from controller level

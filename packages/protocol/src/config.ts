@@ -14,3 +14,22 @@ export interface ProjectConfig {
     tenantContainerKeys: string[]
   }
 }
+
+/**
+ * User-defined overrides loaded from archmind.json at the project root.
+ * All fields are optional — the engine falls back to built-in heuristics.
+ */
+export interface ArchMindUserConfig {
+  guards?: {
+    /** Class names that should be classified as ir:auth_gate (e.g. "CheckLogin") */
+    auth_gate?: string[]
+    /** Class names that should be classified as ir:authz_check (e.g. "TenantGuard") */
+    authz_check?: string[]
+  }
+  /**
+   * Regex patterns (as strings) matched against the route path to identify
+   * credential endpoints for no_rate_limiting detection.
+   * Defaults to built-in patterns when omitted.
+   */
+  credentialPaths?: string[]
+}

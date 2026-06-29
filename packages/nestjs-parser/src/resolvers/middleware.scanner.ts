@@ -17,6 +17,7 @@ import { join } from "path"
 import { Project, SyntaxKind } from "ts-morph"
 import { classifyGuard } from "./guard.classifier.js"
 import type { GuardDescriptor } from "../types.js"
+import type { ArchMindUserConfig } from "@kidkender/archmind-protocol"
 
 // ---- Types ---------------------------------------------------------------
 
@@ -39,7 +40,7 @@ const REQUEST_METHOD_NAMES: Record<string, string> = {
 
 // ---- Public API ----------------------------------------------------------
 
-export function scanMiddleware(projectRoot: string): MiddlewareMap {
+export function scanMiddleware(projectRoot: string, userConfig?: ArchMindUserConfig): MiddlewareMap {
   const map: MiddlewareMap = new Map()
   const moduleFiles = findModuleFiles(projectRoot)
   if (!moduleFiles.length) return map
@@ -60,7 +61,7 @@ export function scanMiddleware(projectRoot: string): MiddlewareMap {
       const configureMethod = cls.getMethod("configure")
       if (!configureMethod) continue
 
-      extractMiddlewareFromConfigure(configureMethod, map)
+      extractMiddlewareFromConfigure(configureMethod, map, userConfig)
     }
   }
 
@@ -89,7 +90,8 @@ function findModuleFiles(root: string): string[] {
 
 function extractMiddlewareFromConfigure(
   configureMethod: import("ts-morph").MethodDeclaration,
-  map: MiddlewareMap
+  map: MiddlewareMap,
+  userConfig?: ArchMindUserConfig
 ): void {
   // Find all call expressions in the method body
   const body = configureMethod.getBody()
@@ -119,7 +121,7 @@ function extractMiddlewareFromConfigure(
       const existing = map.get(key) ?? []
       for (const cls of middlewareClasses) {
         if (!existing.some(e => e.className === cls)) {
-          existing.push({ className: cls, irType: classifyGuard(cls) })
+          existing.push({ className: cls, irType: classifyGuard(cls, userConfig) })
         }
       }
       map.set(key, existing)

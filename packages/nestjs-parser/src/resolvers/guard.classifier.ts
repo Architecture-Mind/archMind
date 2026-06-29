@@ -1,5 +1,7 @@
+import type { ArchMindUserConfig } from "@kidkender/archmind-protocol"
+
 // Known guard name → IR type heuristic.
-// Unknown custom guards emit "unknown_guard" so they can be classified later.
+// Unknown custom guards emit "unknown_guard" so callers can warn the user.
 
 const AUTH_GATE_NAMES = new Set([
   // Standard Passport / JWT guards
@@ -58,7 +60,14 @@ const AUTHZ_MIDDLEWARE_PATTERNS = [
   /Acl.*Middleware$/,
 ]
 
-export function classifyGuard(className: string): "ir:auth_gate" | "ir:authz_check" | "unknown_guard" {
+export function classifyGuard(
+  className: string,
+  userConfig?: ArchMindUserConfig
+): "ir:auth_gate" | "ir:authz_check" | "unknown_guard" {
+  // User-defined overrides take precedence over built-in heuristics.
+  if (userConfig?.guards?.auth_gate?.includes(className)) return "ir:auth_gate"
+  if (userConfig?.guards?.authz_check?.includes(className)) return "ir:authz_check"
+
   if (AUTH_GATE_NAMES.has(className) || AUTH_GATE_PATTERNS.some(p => p.test(className))) {
     return "ir:auth_gate"
   }

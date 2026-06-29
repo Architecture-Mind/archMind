@@ -1,5 +1,7 @@
 import type { IntermediateExecutionGraph, ExecutionNode } from "./graph.js"
 
+export const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
+
 export type FindingSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO"
 
 export interface FindingInfo {

@@ -16,10 +16,11 @@ import { Project, SyntaxKind } from "ts-morph"
 import type { CallExpression, Node } from "ts-morph"
 import { classifyGuard } from "./guard.classifier.js"
 import type { GuardDescriptor } from "../types.js"
+import type { ArchMindUserConfig } from "@kidkender/archmind-protocol"
 
 export type CustomDecoratorRegistry = Map<string, GuardDescriptor[]>
 
-export function scanCustomDecorators(projectRoot: string): CustomDecoratorRegistry {
+export function scanCustomDecorators(projectRoot: string, userConfig?: ArchMindUserConfig): CustomDecoratorRegistry {
   const registry: CustomDecoratorRegistry = new Map()
 
   const files = findDecoratorFiles(projectRoot)
@@ -38,7 +39,7 @@ export function scanCustomDecorators(projectRoot: string): CustomDecoratorRegist
       if (!fn.isExported()) continue
       const name = fn.getName()
       if (!name) continue
-      const guards = extractFromNode(fn)
+      const guards = extractFromNode(fn, userConfig)
       if (guards.length) registry.set(name, guards)
     }
 
@@ -50,7 +51,7 @@ export function scanCustomDecorators(projectRoot: string): CustomDecoratorRegist
       const arrowFn = init.asKind(SyntaxKind.ArrowFunction)
         ?? init.asKind(SyntaxKind.FunctionExpression)
       if (!arrowFn) continue
-      const guards = extractFromNode(arrowFn)
+      const guards = extractFromNode(arrowFn, userConfig)
       if (guards.length) registry.set(name, guards)
     }
   }
@@ -78,7 +79,7 @@ function findDecoratorFiles(root: string): string[] {
 }
 
 /** Walk a function/arrow body, find applyDecorators(UseGuards(...), ...) and extract guards. */
-function extractFromNode(node: Node): GuardDescriptor[] {
+function extractFromNode(node: Node, userConfig?: ArchMindUserConfig): GuardDescriptor[] {
   const calls = node.getDescendantsOfKind(SyntaxKind.CallExpression)
 
   for (const call of calls) {
@@ -93,7 +94,7 @@ function extractFromNode(node: Node): GuardDescriptor[] {
 
       for (const inner of candidates) {
         if (inner.getExpression().getText() !== "UseGuards") continue
-        return parseUseGuardsArgs(inner)
+        return parseUseGuardsArgs(inner, userConfig)
       }
     }
   }
@@ -101,7 +102,7 @@ function extractFromNode(node: Node): GuardDescriptor[] {
   return []
 }
 
-function parseUseGuardsArgs(useGuardsCall: CallExpression): GuardDescriptor[] {
+function parseUseGuardsArgs(useGuardsCall: CallExpression, userConfig?: ArchMindUserConfig): GuardDescriptor[] {
   const guards: GuardDescriptor[] = []
 
   for (const arg of useGuardsCall.getArguments()) {
@@ -110,27 +111,27 @@ function parseUseGuardsArgs(useGuardsCall: CallExpression): GuardDescriptor[] {
     // AuthGuard('jwt') — string arg
     const withStr = text.match(/^(\w+)\(['"]([^'"]+)['"]\)$/)
     if (withStr) {
-      guards.push({ className: withStr[1], args: [withStr[2]], irType: classifyGuard(withStr[1]) })
+      guards.push({ className: withStr[1], args: [withStr[2]], irType: classifyGuard(withStr[1], userConfig) })
       continue
     }
 
     // AuthGuard({ public: ... }) — object arg factory
     const withObj = text.match(/^(\w+)\(\{/)
     if (withObj) {
-      guards.push({ className: withObj[1], args: [], irType: classifyGuard(withObj[1]) })
+      guards.push({ className: withObj[1], args: [], irType: classifyGuard(withObj[1], userConfig) })
       continue
     }
 
     // AuthGuard() — no-arg factory
     const noArg = text.match(/^(\w+)\(\)$/)
     if (noArg) {
-      guards.push({ className: noArg[1], args: [], irType: classifyGuard(noArg[1]) })
+      guards.push({ className: noArg[1], args: [], irType: classifyGuard(noArg[1], userConfig) })
       continue
     }
 
     // Plain class reference: RolesGuard
     if (/^\w+$/.test(text)) {
-      guards.push({ className: text, args: [], irType: classifyGuard(text) })
+      guards.push({ className: text, args: [], irType: classifyGuard(text, userConfig) })
     }
   }
 
