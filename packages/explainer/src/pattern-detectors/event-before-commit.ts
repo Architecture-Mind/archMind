@@ -1,5 +1,7 @@
 import type { SemanticFact } from "../fact-extraction/types.js"
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import { IR_NODE_TYPES } from "@archmind/protocol"
+import { query } from "@archmind/graph-query"
 import type { Finding, Evidence, ReasoningStep } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
@@ -11,17 +13,15 @@ interface EscapeGroup {
 }
 
 function findEscapeGroups(graph: IntermediateExecutionGraph): EscapeGroup[] {
+  const q = query(graph)
+  // escapes_transaction edges: escape → transaction_boundary
+  const escapeEdges = q.edges().ofRelation("escapes_transaction").toArray()
   const groups: EscapeGroup[] = []
 
-  // Find all escapes_transaction edges: escape → transaction_boundary
-  const escapeEdges = graph.edges.filter((e) => e.relation === "escapes_transaction")
-
   for (const edge of escapeEdges) {
-    const txnNode    = graph.nodes.find((n) => n.id === edge.to && n.type === "transaction_boundary")
-    const escapeNode = graph.nodes.find((n) => n.id === edge.from && n.type === "transaction_escape")
-
+    const txnNode    = graph.nodes.find((n) => n.id === edge.to   && n.type === IR_NODE_TYPES.TXN_BOUNDARY)
+    const escapeNode = graph.nodes.find((n) => n.id === edge.from && n.type === IR_NODE_TYPES.TXN_ESCAPE)
     if (!txnNode || !escapeNode) continue
-
     groups.push({
       transactionNodeId: txnNode.id,
       escapeNodeId:      escapeNode.id,
@@ -36,6 +36,11 @@ export function detectEventBeforeCommit(
   _facts: SemanticFact[],
   graph: IntermediateExecutionGraph
 ): Finding[] {
+  const q = query(graph)
+
+  // Fast guard: skip if the graph has no transaction escapes at all
+  if (!q.transaction().hasEscape()) return []
+
   const groups  = findEscapeGroups(graph)
   const findings: Finding[] = []
 
@@ -82,13 +87,11 @@ export function detectEventBeforeCommit(
         detector:            FINDING_TYPES.EVENT_BEFORE_COMMIT,
         ontology_primitives: ["TransactionEscape", "TransactionBoundary", "RollbackPropagation"],
         supporting_nodes:    supportingNodes,
-        supporting_edges:    graph.edges
-          .filter(
-            (e) =>
-              e.relation === "escapes_transaction" &&
-              (supportingNodes.includes(e.from) || supportingNodes.includes(e.to))
-          )
-          .map((e) => `${e.from}:${e.relation}:${e.to}`),
+        supporting_edges:    q.edges()
+            .ofRelation("escapes_transaction")
+            .toArray()
+            .filter((e) => supportingNodes.includes(e.from) || supportingNodes.includes(e.to))
+            .map((e) => `${e.from}:${e.relation}:${e.to}`),
       },
       summary: `${group.escapeSymbol} is dispatched inside a transaction before commit — if the transaction rolls back, the dispatch cannot be undone`,
       reasoning,

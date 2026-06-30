@@ -1,5 +1,6 @@
 import type { SemanticFact } from "../fact-extraction/types.js"
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import { query } from "@archmind/graph-query"
 import type { Finding, Evidence, ReasoningStep } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
@@ -11,17 +12,15 @@ interface UnscopedQueryGroup {
 }
 
 function findUnscopedGroups(graph: IntermediateExecutionGraph): UnscopedQueryGroup[] {
-  const groups: UnscopedQueryGroup[] = []
-
+  const q = query(graph)
   // missing_tenant_scope edges: unscoped_query → runtime_injection
-  const missingEdges = graph.edges.filter((e) => e.relation === "missing_tenant_scope")
+  const missingEdges = q.edges().ofRelation("missing_tenant_scope").toArray()
+  const groups: UnscopedQueryGroup[] = []
 
   for (const edge of missingEdges) {
     const unscopedNode  = graph.nodes.find((n) => n.id === edge.from && n.type === "unscoped_query")
     const injectionNode = graph.nodes.find((n) => n.id === edge.to   && n.type === "runtime_injection")
-
     if (!unscopedNode || !injectionNode) continue
-
     groups.push({
       unscopedNodeId:  unscopedNode.id,
       unscopedSymbol:  unscopedNode.symbol,
@@ -36,6 +35,12 @@ export function detectMissingTenantScope(
   _facts: SemanticFact[],
   graph: IntermediateExecutionGraph
 ): Finding[] {
+  const q = query(graph)
+
+  // Fast guards: need both tenant context and unscoped access to fire
+  if (!q.data().hasTenantContext()) return []
+  if (!q.data().hasUnscopedAccess()) return []
+
   const groups   = findUnscopedGroups(graph)
   const findings: Finding[] = []
 
