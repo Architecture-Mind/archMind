@@ -1,0 +1,10 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`IR conformance — NestJS user-api fixture tracks legacy edge relations (snapshot — should shrink over time) 1`] = `
+[
+  "next_middleware",
+  "validates",
+]
+`;
+
+exports[`IR conformance — NestJS user-api fixture tracks legacy node types (snapshot — should shrink over time) 1`] = `[]`;
