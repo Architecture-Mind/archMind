@@ -5,7 +5,7 @@ import {
   loadTopologyBaseline,
   DANGER_NODE_TYPES,
 } from "@archmind/retrieval"
-import type { TopologyVerifyResult } from "@archmind/retrieval"
+import type { TopologyVerifyResult, TopologyDrift } from "@archmind/retrieval"
 import { parseProject, requireProject } from "../utils/parse-project.js"
 
 export async function runDiff(flags: Record<string, string>): Promise<void> {
@@ -38,6 +38,61 @@ export async function runDiff(flags: Record<string, string>): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Behavior diff — semantic interpretation of topology changes
+// ---------------------------------------------------------------------------
+
+interface SemanticChange {
+  severity:     "CRITICAL" | "HIGH" | "MEDIUM" | "INFO"
+  description:  string
+  isRegression: boolean
+}
+
+const SEVERITY_ICON: Record<string, string> = {
+  CRITICAL: "⛔",
+  HIGH:     "⚠ ",
+  MEDIUM:   "~ ",
+  INFO:     "ℹ ",
+}
+
+const LOST_SEMANTICS: Record<string, SemanticChange> = {
+  "ir:auth_gate":       { severity: "CRITICAL", isRegression: true,  description: "Authentication gate removed — endpoint is now publicly accessible" },
+  "ir:authz_check":     { severity: "HIGH",     isRegression: true,  description: "Authorization check removed — any authenticated user can perform this operation" },
+  "ir:txn_boundary":    { severity: "HIGH",     isRegression: true,  description: "Operation is no longer atomic — partial writes can succeed on failure" },
+  "ir:validation_gate": { severity: "MEDIUM",   isRegression: true,  description: "Input validation removed — request data is no longer validated" },
+  "ir:scoped_query":    { severity: "MEDIUM",   isRegression: true,  description: "Scoped database query removed — queries may now cross tenant boundaries" },
+  "ir:unscoped_query":  { severity: "INFO",     isRegression: false, description: "Unscoped query removed — data access is now properly scoped" },
+  "ir:unscoped_write":  { severity: "INFO",     isRegression: false, description: "Unscoped write removed — data mutation is now properly scoped" },
+}
+
+const GAINED_SEMANTICS: Record<string, SemanticChange> = {
+  "ir:unscoped_query":  { severity: "CRITICAL", isRegression: true,  description: "Query now runs without tenant scope — risk of cross-tenant data exposure" },
+  "ir:unscoped_write":  { severity: "CRITICAL", isRegression: true,  description: "Write now runs without tenant scope — risk of cross-tenant data mutation" },
+  "ir:auth_gate":       { severity: "INFO",     isRegression: false, description: "Authentication gate added — endpoint is now protected" },
+  "ir:authz_check":     { severity: "INFO",     isRegression: false, description: "Authorization check added — resource-level protection in place" },
+  "ir:txn_boundary":    { severity: "INFO",     isRegression: false, description: "Operation is now transactional — writes are atomic" },
+  "ir:validation_gate": { severity: "INFO",     isRegression: false, description: "Input validation added" },
+  "ir:scoped_query":    { severity: "INFO",     isRegression: false, description: "Query is now tenant-scoped — isolation improved" },
+}
+
+function toSemanticChanges(drift: TopologyDrift): SemanticChange[] {
+  const changes: SemanticChange[] = []
+  for (const type of drift.lost_types) {
+    const sem = LOST_SEMANTICS[type]
+    if (sem) changes.push(sem)
+  }
+  for (const type of drift.gained_types) {
+    const sem = GAINED_SEMANTICS[type]
+    if (sem) changes.push(sem)
+  }
+  // Sort: regressions first, then by severity
+  const severityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, INFO: 3 }
+  return changes.sort((a, b) => {
+    if (a.isRegression !== b.isRegression) return a.isRegression ? -1 : 1
+    return severityOrder[a.severity] - severityOrder[b.severity]
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Text renderer
 // ---------------------------------------------------------------------------
 
@@ -59,23 +114,38 @@ function renderText(result: TopologyVerifyResult, label: string, routeCount: num
   }
 
   if (regressions.length > 0) {
-    console.error(`Topology regressions (${regressions.length}):`)
+    console.error(`Behavior regressions (${regressions.length}):`)
     for (const d of regressions) {
       console.error(`  ${d.route}`)
-      if (d.lost_types.length > 0) {
-        console.error(`    lost:   [${d.lost_types.join(", ")}]`)
-      }
-      const dangerGained = d.gained_types.filter((t) => DANGER_NODE_TYPES.includes(t))
-      if (dangerGained.length > 0) {
-        console.error(`    danger: [${dangerGained.join(", ")}]`)
+      const changes = toSemanticChanges(d)
+      if (changes.length > 0) {
+        for (const c of changes) {
+          const icon = SEVERITY_ICON[c.severity] ?? "  "
+          console.error(`    ${icon} ${c.description}`)
+        }
+      } else {
+        // Fallback: raw type list for unknown types
+        if (d.lost_types.length > 0)  console.error(`    lost:   [${d.lost_types.join(", ")}]`)
+        const dangerGained = d.gained_types.filter((t) => DANGER_NODE_TYPES.includes(t))
+        if (dangerGained.length > 0)  console.error(`    danger: [${dangerGained.join(", ")}]`)
       }
     }
     console.error()
   }
 
   if (additions.length > 0) {
-    console.log(`Additions (${additions.length}):`)
-    additions.forEach((d) => console.log(`  ${d.route}: gained [${d.gained_types.join(", ")}]`))
+    console.log(`Behavior improvements (${additions.length}):`)
+    for (const d of additions) {
+      console.log(`  ${d.route}`)
+      const changes = toSemanticChanges(d)
+      for (const c of changes) {
+        const icon = SEVERITY_ICON[c.severity] ?? "  "
+        console.log(`    ${icon} ${c.description}`)
+      }
+      if (changes.length === 0) {
+        console.log(`    gained: [${d.gained_types.join(", ")}]`)
+      }
+    }
     console.log()
   }
 
@@ -96,7 +166,7 @@ function renderMarkdown(result: TopologyVerifyResult, label: string, routeCount:
   const stable      = routeCount - result.drifts.length - result.new_routes.length - result.removed_routes.length
   const lines: string[] = []
 
-  const status = result.ok ? "✅ Topology OK" : "❌ Topology Regression"
+  const status = result.ok ? "✅ No behavior regressions" : "❌ Behavior regression detected"
   lines.push(`## ${status} — \`${label}\``)
   lines.push("")
   lines.push(`**${stable}/${routeCount} routes stable**`)
@@ -105,17 +175,26 @@ function renderMarkdown(result: TopologyVerifyResult, label: string, routeCount:
   if (regressions.length > 0) {
     lines.push("### ⚠️ Regressions")
     lines.push("")
-    lines.push("| Route | Lost | Danger gained |")
-    lines.push("|-------|------|---------------|")
     for (const d of regressions) {
-      const lost      = d.lost_types.length > 0
-        ? d.lost_types.map((t) => `\`${t}\``).join(", ")
-        : "—"
-      const danger    = d.gained_types.filter((t) => DANGER_NODE_TYPES.includes(t))
-      const dangerStr = danger.length > 0 ? danger.map((t) => `\`${t}\``).join(", ") : "—"
-      lines.push(`| \`${d.route}\` | ${lost} | ${dangerStr} |`)
+      lines.push(`**\`${d.route}\`**`)
+      lines.push("")
+      const changes = toSemanticChanges(d).filter((c) => c.isRegression)
+      if (changes.length > 0) {
+        for (const c of changes) {
+          const icon = SEVERITY_ICON[c.severity]?.trim() ?? "⚠️"
+          lines.push(`- ${icon} **${c.severity}** — ${c.description}`)
+        }
+      } else {
+        if (d.lost_types.length > 0) {
+          lines.push(`- Lost: ${d.lost_types.map((t) => `\`${t}\``).join(", ")}`)
+        }
+        const dangerGained = d.gained_types.filter((t) => DANGER_NODE_TYPES.includes(t))
+        if (dangerGained.length > 0) {
+          lines.push(`- Danger gained: ${dangerGained.map((t) => `\`${t}\``).join(", ")}`)
+        }
+      }
+      lines.push("")
     }
-    lines.push("")
   }
 
   if (result.removed_routes.length > 0) {
@@ -135,21 +214,27 @@ function renderMarkdown(result: TopologyVerifyResult, label: string, routeCount:
   }
 
   if (additions.length > 0) {
-    lines.push(`<details><summary>ℹ️ Informational additions (${additions.length})</summary>`)
+    lines.push(`<details><summary>✅ Behavior improvements (${additions.length})</summary>`)
     lines.push("")
     for (const d of additions) {
-      const gained = d.gained_types.map((t) => `\`${t}\``).join(", ")
-      lines.push(`- \`${d.route}\`: gained ${gained}`)
+      lines.push(`**\`${d.route}\`**`)
+      const changes = toSemanticChanges(d).filter((c) => !c.isRegression)
+      for (const c of changes) {
+        lines.push(`- ℹ ${c.description}`)
+      }
+      if (changes.length === 0) {
+        lines.push(`- Gained: ${d.gained_types.map((t) => `\`${t}\``).join(", ")}`)
+      }
+      lines.push("")
     }
-    lines.push("")
     lines.push("</details>")
     lines.push("")
   }
 
   if (result.ok) {
-    lines.push("_No topology regressions detected. Safe to merge._")
+    lines.push("_No behavior regressions detected. Safe to merge._")
   } else {
-    lines.push("> Run `archmind verify --project . --update` to accept if drift is intentional.")
+    lines.push("> Run `archmind diff --update` to accept if drift is intentional.")
   }
 
   return lines.join("\n")
