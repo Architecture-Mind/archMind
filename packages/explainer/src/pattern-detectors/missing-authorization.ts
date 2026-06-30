@@ -22,8 +22,6 @@ export function detectMissingAuthorization(
   const ctrlNode = q.nodes().ofType(IR_NODE_TYPES.BUSINESS_HANDLER).first()
   if (!ctrlNode) return []
 
-  // isAuthenticatedMutation() = isMutation() && hasAuth() && !hasAuthorization()
-  // but we also need the fact-layer check for accurate auth detection
   const method = graph.method?.toUpperCase() ?? ""
   if (!q.isMutation()) return []
 
@@ -38,7 +36,7 @@ export function detectMissingAuthorization(
   if (hasAuthorization) return []
 
   // Guard: authz node directly on graph (covers cases fact-layer misses)
-  if (q.hasAuthorization()) return []
+  if (q.security().hasAuthorization()) return []
 
   const gateFact = authFacts.find((f) => f.layer === "middleware")!
   const evidence: Evidence[] = [

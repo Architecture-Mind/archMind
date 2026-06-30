@@ -15,7 +15,7 @@ export function detectFatController(
 
   const ctrlNode = q.nodes().ofType(IR_NODE_TYPES.BUSINESS_HANDLER).first()
   if (!ctrlNode) return []
-  if (q.serviceCallCount() < FAT_THRESHOLD) return []
+  if (q.calls().count() < FAT_THRESHOLD) return []
 
   const serviceNodes = q.nodes().ofType(IR_NODE_TYPES.SERVICE_CALL).toArray()
   const classes = new Set(serviceNodes.map((n) => n.symbol.split("::")[0]).filter(Boolean))

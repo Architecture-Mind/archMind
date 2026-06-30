@@ -26,43 +26,43 @@ export class RouteQuery {
   // ---------------------------------------------------------------------------
 
   withAuth(): RouteQuery {
-    return this._filter((q) => q.hasAuth())
+    return this._filter((q) => q.security().hasAuthentication())
   }
 
   withoutAuth(): RouteQuery {
-    return this._filter((q) => !q.hasAuth())
+    return this._filter((q) => !q.security().hasAuthentication())
   }
 
   withAuthorization(): RouteQuery {
-    return this._filter((q) => q.hasAuthorization())
+    return this._filter((q) => q.security().hasAuthorization())
   }
 
   withoutAuthorization(): RouteQuery {
-    return this._filter((q) => !q.hasAuthorization())
+    return this._filter((q) => !q.security().hasAuthorization())
   }
 
   withTransaction(): RouteQuery {
-    return this._filter((q) => q.hasTransaction())
+    return this._filter((q) => q.transaction().exists())
   }
 
   withoutTransaction(): RouteQuery {
-    return this._filter((q) => !q.hasTransaction())
+    return this._filter((q) => !q.transaction().exists())
   }
 
   withTenantContext(): RouteQuery {
-    return this._filter((q) => q.hasTenantContext())
+    return this._filter((q) => q.data().hasTenantContext())
   }
 
   withUnscopedAccess(): RouteQuery {
-    return this._filter((q) => q.hasUnscopedAccess())
+    return this._filter((q) => q.data().hasUnscopedAccess())
   }
 
   withTransactionEscape(): RouteQuery {
-    return this._filter((q) => q.hasTransactionEscape())
+    return this._filter((q) => q.transaction().hasEscape())
   }
 
   withAsyncDispatch(): RouteQuery {
-    return this._filter((q) => q.hasAsyncDispatch())
+    return this._filter((q) => q.messaging().hasDispatch())
   }
 
   isMutation(): RouteQuery {
