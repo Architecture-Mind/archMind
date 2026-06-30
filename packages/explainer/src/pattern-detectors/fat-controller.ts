@@ -1,23 +1,23 @@
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
 import { IR_NODE_TYPES } from "@archmind/protocol"
+import { query } from "@archmind/graph-query"
 import type { Finding } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
 
 // Threshold: ≥ 5 distinct service classes signals a fat controller.
-// A controller that orchestrates 5+ services is doing too much itself.
 const FAT_THRESHOLD = 5
 
 export function detectFatController(
   graph: IntermediateExecutionGraph
 ): Finding[] {
-  const ctrlNode = graph.nodes.find((n) => n.type === IR_NODE_TYPES.BUSINESS_HANDLER)
+  const q = query(graph)
+
+  const ctrlNode = q.nodes().ofType(IR_NODE_TYPES.BUSINESS_HANDLER).first()
   if (!ctrlNode) return []
+  if (q.serviceCallCount() < FAT_THRESHOLD) return []
 
-  const serviceNodes = graph.nodes.filter((n) => n.type === IR_NODE_TYPES.SERVICE_CALL)
-  if (serviceNodes.length < FAT_THRESHOLD) return []
-
-  // Deduplicate by class name to count distinct service dependencies
+  const serviceNodes = q.nodes().ofType(IR_NODE_TYPES.SERVICE_CALL).toArray()
   const classes = new Set(serviceNodes.map((n) => n.symbol.split("::")[0]).filter(Boolean))
   if (classes.size < FAT_THRESHOLD) return []
 

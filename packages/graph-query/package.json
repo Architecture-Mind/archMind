@@ -1,0 +1,32 @@
+{
+  "name": "@archmind/graph-query",
+  "version": "0.1.0",
+  "description": "Fluent query API for ArchMind execution graphs — replaces ad-hoc graph.nodes.filter() patterns with semantic, composable queries.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": [
+    "archmind",
+    "graph",
+    "query",
+    "static-analysis"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@kidkender/archmind-protocol": "*",
+    "typescript": "^5.4.0"
+  }
+}

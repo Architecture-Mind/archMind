@@ -1,6 +1,7 @@
 import type { SemanticFact, AuthorizationCheckFact } from "../fact-extraction/types.js"
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import { IR_NODE_TYPES, MUTATION_METHODS } from "@archmind/protocol"
+import { IR_NODE_TYPES } from "@archmind/protocol"
+import { query } from "@archmind/graph-query"
 import type { Finding, Evidence } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
@@ -16,14 +17,15 @@ export function detectMissingAuthorization(
   facts: SemanticFact[],
   graph: IntermediateExecutionGraph
 ): Finding[] {
-  const ctrlNode = graph.nodes.find(
-    (n) => n.type === IR_NODE_TYPES.BUSINESS_HANDLER || n.type === "controller_action"
-  )
+  const q = query(graph)
+
+  const ctrlNode = q.nodes().ofType(IR_NODE_TYPES.BUSINESS_HANDLER).first()
   if (!ctrlNode) return []
 
-  // Only fire on mutation methods
+  // isAuthenticatedMutation() = isMutation() && hasAuth() && !hasAuthorization()
+  // but we also need the fact-layer check for accurate auth detection
   const method = graph.method?.toUpperCase() ?? ""
-  if (!MUTATION_METHODS.has(method)) return []
+  if (!q.isMutation()) return []
 
   const authFacts = facts.filter(
     (f): f is AuthorizationCheckFact => f.kind === "authorization_check"
@@ -32,16 +34,11 @@ export function detectMissingAuthorization(
   const hasAuthGate = authFacts.some((f) => f.layer === "middleware")
   if (!hasAuthGate) return [] // unauthenticated route — different problem
 
-  const hasAuthorization = authFacts.some(
-    (f) => f.layer === "policy" || f.layer === "service"
-  )
-  if (hasAuthorization) return [] // properly authorized
+  const hasAuthorization = authFacts.some((f) => f.layer === "policy" || f.layer === "service")
+  if (hasAuthorization) return []
 
-  // Also check for authorization_check nodes directly (middleware role check)
-  const hasAuthzNode = graph.nodes.some(
-    (n) => n.type === IR_NODE_TYPES.AUTHZ_CHECK || n.type === "authorization_check"
-  )
-  if (hasAuthzNode) return []
+  // Guard: authz node directly on graph (covers cases fact-layer misses)
+  if (q.hasAuthorization()) return []
 
   const gateFact = authFacts.find((f) => f.layer === "middleware")!
   const evidence: Evidence[] = [

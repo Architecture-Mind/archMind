@@ -17,7 +17,8 @@
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js"
   },
   "dependencies": {
-    "@archmind/protocol": "npm:@kidkender/archmind-protocol@^0.2.1"
+    "@archmind/protocol": "npm:@kidkender/archmind-protocol@^0.2.1",
+    "@archmind/graph-query": "*"
   },
   "devDependencies": {
     "@archmind/laravel-parser": "*",
