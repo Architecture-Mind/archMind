@@ -1,5 +1,6 @@
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
 import { IR_NODE_TYPES, IR_EDGE_RELATIONS } from "@archmind/protocol"
+import { query } from "@archmind/graph-query"
 import type { Finding } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
@@ -22,8 +23,7 @@ interface ResourceRef {
 }
 
 function getAuthorizedResources(graph: IntermediateExecutionGraph): ResourceRef[] {
-  return graph.edges
-    .filter((e) => e.relation === IR_EDGE_RELATIONS.AUTHORIZES)
+  return query(graph).edges().ofRelation(IR_EDGE_RELATIONS.AUTHORIZES).toArray()
     .flatMap((e) => {
       const resourceNode = graph.nodes.find((n) => n.id === e.to && n.type === IR_NODE_TYPES.RESOURCE)
       if (!resourceNode) return []
@@ -32,8 +32,7 @@ function getAuthorizedResources(graph: IntermediateExecutionGraph): ResourceRef[
 }
 
 function getAccessedResources(graph: IntermediateExecutionGraph): ResourceRef[] {
-  return graph.edges
-    .filter((e) => e.relation === IR_EDGE_RELATIONS.ACCESSES)
+  return query(graph).edges().ofRelation(IR_EDGE_RELATIONS.ACCESSES).toArray()
     .flatMap((e) => {
       const resourceNode = graph.nodes.find((n) => n.id === e.to && n.type === IR_NODE_TYPES.RESOURCE)
       if (!resourceNode) return []
@@ -44,8 +43,7 @@ function getAccessedResources(graph: IntermediateExecutionGraph): ResourceRef[] 
 export function detectResourceMismatch(
   graph: IntermediateExecutionGraph
 ): Finding[] {
-  const resourceNodes = graph.nodes.filter((n) => n.type === IR_NODE_TYPES.RESOURCE)
-  if (resourceNodes.length === 0) return []
+  if (!query(graph).data().resources().exists()) return []
 
   const authorized = getAuthorizedResources(graph)
   const accessed   = getAccessedResources(graph)

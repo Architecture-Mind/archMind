@@ -1,5 +1,6 @@
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
 import { IR_NODE_TYPES } from "@archmind/protocol"
+import { query } from "@archmind/graph-query"
 import type { Finding } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
@@ -25,11 +26,11 @@ function parseDetail(raw: unknown): MailDetail | null {
 export function detectSynchronousMail(
   graph: IntermediateExecutionGraph
 ): Finding[] {
-  const ctrlNode = graph.nodes.find((n) => n.type === IR_NODE_TYPES.BUSINESS_HANDLER)
+  const q = query(graph)
+  const ctrlNode = q.nodes().ofType(IR_NODE_TYPES.BUSINESS_HANDLER).first()
   if (!ctrlNode) return []
 
-  const syncMailNodes = graph.nodes.filter((n) => {
-    if (n.type !== "ir:mail") return false
+  const syncMailNodes = q.messaging().mails().toArray().filter((n) => {
     const detail = parseDetail(n.detail)
     return detail !== null && detail.queued === false
   })
