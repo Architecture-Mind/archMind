@@ -1,5 +1,6 @@
 import type { SemanticFact, AuthorizationCheckFact } from "../fact-extraction/types.js"
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import { query } from "@archmind/graph-query"
 import type { Finding, ReasoningStep, Evidence, UncertaintyReason } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
@@ -16,6 +17,9 @@ export function detectDuplicateAuthorization(
   facts: SemanticFact[],
   graph: IntermediateExecutionGraph
 ): Finding[] {
+  // Fast guard: need at least some auth presence to have duplicates
+  if (!query(graph).security().hasAuthentication()) return []
+
   const authFacts = facts.filter(
     (f): f is AuthorizationCheckFact => f.kind === "authorization_check"
   )
