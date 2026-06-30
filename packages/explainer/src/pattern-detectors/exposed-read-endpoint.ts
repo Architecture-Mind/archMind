@@ -1,5 +1,6 @@
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
 import { IR_NODE_TYPES } from "@archmind/protocol"
+import { query } from "@archmind/graph-query"
 import type { Finding } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
@@ -22,20 +23,16 @@ export function detectExposedReadEndpoint(
   if (!READ_METHODS.has(method)) return []
 
   // Must have a controller
-  const ctrlNode = graph.nodes.find((n) => n.type === IR_NODE_TYPES.BUSINESS_HANDLER)
+  const q = query(graph)
+  const ctrlNode = q.nodes().ofType(IR_NODE_TYPES.BUSINESS_HANDLER).first()
   if (!ctrlNode) return []
 
-  // Skip if any auth gate present
-  const hasAuthGate = graph.nodes.some((n) => n.type === IR_NODE_TYPES.AUTH_GATE)
-  if (hasAuthGate) return []
-
-  // Skip if any authz check present
-  const hasAuthzCheck = graph.nodes.some((n) => n.type === IR_NODE_TYPES.AUTHZ_CHECK)
-  if (hasAuthzCheck) return []
+  // Skip if any auth or authz gate present
+  if (q.security().hasAuthentication() || q.security().hasAuthorization()) return []
 
   // Only fire if there are service calls or resource nodes (business data access)
-  const serviceCalls = graph.nodes.filter((n) => n.type === IR_NODE_TYPES.SERVICE_CALL)
-  const resources    = graph.nodes.filter((n) => n.type === IR_NODE_TYPES.RESOURCE)
+  const serviceCalls = q.nodes().ofType(IR_NODE_TYPES.SERVICE_CALL).toArray()
+  const resources    = q.data().resources().toArray()
   if (serviceCalls.length === 0 && resources.length === 0) return []
 
   const dataNodes = [...serviceCalls, ...resources]

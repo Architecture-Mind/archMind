@@ -1,5 +1,5 @@
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import { IR_NODE_TYPES } from "@archmind/protocol"
+import { query } from "@archmind/graph-query"
 import type { Finding } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
@@ -15,10 +15,9 @@ import { stableHash } from "../findings/stable-hash.js"
 export function detectDeadMiddleware(
   graph: IntermediateExecutionGraph
 ): Finding[] {
-  const middlewareNodes = graph.nodes.filter(
-    (n) => n.type === IR_NODE_TYPES.AUTH_GATE
-  )
-  if (middlewareNodes.length === 0) return []
+  const q = query(graph)
+  if (!q.security().hasAuthentication()) return []
+  const middlewareNodes = q.security().authenticationGates().toArray()
 
   const outgoingByNode = new Map<string, number>()
   for (const edge of graph.edges) {

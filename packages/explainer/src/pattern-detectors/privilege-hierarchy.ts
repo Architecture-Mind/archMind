@@ -1,5 +1,6 @@
 import type { SemanticFact } from "../fact-extraction/types.js"
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import { query } from "@archmind/graph-query"
 import type { Finding, ReasoningStep, Evidence, UncertaintyReason } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
@@ -24,7 +25,8 @@ function detectHierarchyGroups(
 ): PrivilegeHierarchyGroup[] {
   const groups: PrivilegeHierarchyGroup[] = []
 
-  const hierarchyEdges = graph.edges.filter((e) => e.relation === "privilege_hierarchy")
+  const q = query(graph)
+  const hierarchyEdges = q.edges().ofRelation("privilege_hierarchy").toArray()
   if (hierarchyEdges.length === 0) return groups
 
   // Find policy nodes that check permissions involved in hierarchy edges
@@ -75,6 +77,7 @@ export function detectPrivilegeHierarchy(
   _facts: SemanticFact[],
   graph: IntermediateExecutionGraph
 ): Finding[] {
+  if (!query(graph).edges().ofRelation("privilege_hierarchy").exists()) return []
   const groups = detectHierarchyGroups(graph)
   const findings: Finding[] = []
 

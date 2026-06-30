@@ -1,5 +1,6 @@
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
 import { IR_NODE_TYPES } from "@archmind/protocol"
+import { query } from "@archmind/graph-query"
 import type { Finding } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
@@ -30,18 +31,17 @@ function parseDetail(raw: string | undefined): ResourceDetail | null {
 export function detectApiResourceUnprotected(
   graph: IntermediateExecutionGraph
 ): Finding[] {
-  const ctrlNode = graph.nodes.find((n) => n.type === IR_NODE_TYPES.BUSINESS_HANDLER)
+  const q = query(graph)
+  const ctrlNode = q.nodes().ofType(IR_NODE_TYPES.BUSINESS_HANDLER).first()
   if (!ctrlNode) return []
 
-  const resourceNodes = graph.nodes.filter((n) => n.type === "ir:api_resource")
+  const resourceNodes = q.nodes().ofType("ir:api_resource").toArray()
   if (resourceNodes.length === 0) return []
 
-  const hasAuthGate  = graph.nodes.some((n) => n.type === IR_NODE_TYPES.AUTH_GATE)
-  const hasAuthzCheck = graph.nodes.some((n) => n.type === IR_NODE_TYPES.AUTHZ_CHECK)
-  if (hasAuthGate || hasAuthzCheck) return []
+  if (q.security().hasAuthentication() || q.security().hasAuthorization()) return []
 
   // Skip if exposed_read_endpoint would already fire (service calls present on GET)
-  const hasServiceCalls = graph.nodes.some((n) => n.type === IR_NODE_TYPES.SERVICE_CALL)
+  const hasServiceCalls = q.calls().count() > 0
   const isReadMethod    = ["GET", "HEAD"].includes(graph.method?.toUpperCase() ?? "")
   if (hasServiceCalls && isReadMethod) return []
 

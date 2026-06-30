@@ -1,5 +1,6 @@
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
 import { IR_NODE_TYPES } from "@archmind/protocol"
+import { query } from "@archmind/graph-query"
 import type { Finding } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
@@ -19,12 +20,13 @@ const LAYER_THRESHOLD = 3
 export function detectOverAuthorizedRoute(
   graph: IntermediateExecutionGraph
 ): Finding[] {
-  const ctrlNode = graph.nodes.find((n) => n.type === IR_NODE_TYPES.BUSINESS_HANDLER)
+  const q = query(graph)
+  const ctrlNode = q.nodes().ofType(IR_NODE_TYPES.BUSINESS_HANDLER).first()
   if (!ctrlNode) return []
 
-  const authGates      = graph.nodes.filter((n) => n.type === IR_NODE_TYPES.AUTH_GATE)
-  const authzChecks    = graph.nodes.filter((n) => n.type === IR_NODE_TYPES.AUTHZ_CHECK)
-  const validationGates = graph.nodes.filter((n) => n.type === IR_NODE_TYPES.VALIDATION_GATE)
+  const authGates      = q.security().authenticationGates().toArray()
+  const authzChecks    = q.security().authorizationChecks().toArray()
+  const validationGates = q.nodes().ofType(IR_NODE_TYPES.VALIDATION_GATE).toArray()
 
   // Count distinct auth layers
   const layers: Array<{ label: string; nodes: typeof authGates }> = []

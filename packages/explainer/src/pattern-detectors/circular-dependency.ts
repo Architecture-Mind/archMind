@@ -1,5 +1,6 @@
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
 import { IR_NODE_TYPES } from "@archmind/protocol"
+import { query } from "@archmind/graph-query"
 import type { Finding } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
@@ -21,9 +22,8 @@ function extractClassName(symbol: string): string {
 export function detectCircularDependency(
   graph: IntermediateExecutionGraph
 ): Finding[] {
-  const serviceNodes = graph.nodes.filter(
-    (n) => n.type === IR_NODE_TYPES.SERVICE_CALL
-  )
+  const q = query(graph)
+  const serviceNodes = q.nodes().ofType(IR_NODE_TYPES.SERVICE_CALL).toArray()
   if (serviceNodes.length < 2) return []
 
   const nodeById = new Map(graph.nodes.map((n) => [n.id, n]))

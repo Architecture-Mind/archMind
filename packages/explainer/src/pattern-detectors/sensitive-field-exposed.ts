@@ -1,5 +1,6 @@
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
 import { IR_NODE_TYPES } from "@archmind/protocol"
+import { query } from "@archmind/graph-query"
 import type { Finding } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
@@ -29,10 +30,11 @@ export function detectSensitiveFieldExposed(
 ): Finding[] {
   const findings: Finding[] = []
 
-  const ctrlNode = graph.nodes.find((n) => n.type === IR_NODE_TYPES.BUSINESS_HANDLER)
+  const q = query(graph)
+  const ctrlNode = q.nodes().ofType(IR_NODE_TYPES.BUSINESS_HANDLER).first()
   if (!ctrlNode) return []
 
-  const resourceNodes = graph.nodes.filter((n) => n.type === "ir:api_resource")
+  const resourceNodes = q.nodes().ofType("ir:api_resource").toArray()
 
   for (const resNode of resourceNodes) {
     const detail = parseDetail(resNode.detail)
