@@ -132,7 +132,84 @@ export function toIRNodeType(type: string): string {
 // ---------------------------------------------------------------------------
 
 const IR_TYPE_SET = new Set<string>(Object.values(IR_NODE_TYPES))
+const IR_EDGE_SET = new Set<string>(Object.values(IR_EDGE_RELATIONS))
+const LEGACY_NODE_SET = new Set<string>(Object.keys(LARAVEL_TO_IR))
+
+// Edge relations that parsers still emit pre-IR-migration.
+// Each entry is a known legacy string that should eventually get an IR equivalent.
+export const LEGACY_EDGE_RELATIONS: ReadonlyArray<string> = [
+  "calls",               // → ir:calls
+  "validates",           // → ir:validates
+  "dispatches",          // → ir:dispatches (string, not constant)
+  "escapes_transaction", // → needs IR equivalent
+  "form_request",        // → needs IR equivalent
+  "next_middleware",     // → needs IR equivalent
+  "opens_transaction",   // → needs IR equivalent
+  "policy_check",        // → needs IR equivalent
+  "responds_with",       // → needs IR equivalent
+  "within_transaction",  // → needs IR equivalent
+  "missing_tenant_scope",// → needs IR equivalent
+  "ir:includes",         // → needs IR normalization
+  "guards",              // → ir:guards (string, not constant)
+  "authorizes",          // → ir:authorizes (string, not constant)
+]
+
+const LEGACY_EDGE_SET = new Set<string>(LEGACY_EDGE_RELATIONS)
 
 export function isIRNodeType(type: string): type is IRNodeType {
   return IR_TYPE_SET.has(type)
+}
+
+export function isIREdgeRelation(relation: string): relation is IREdgeRelation {
+  return IR_EDGE_SET.has(relation)
+}
+
+export interface GraphViolation {
+  kind:     "unknown_node_type" | "legacy_node_type" | "unknown_edge_relation" | "legacy_edge_relation"
+  id?:      string   // node id (for node violations)
+  edgeKey?: string   // "from→to" (for edge violations)
+  value:    string   // the offending type or relation string
+}
+
+/**
+ * Validates all node types and edge relations in a graph against the IR schema.
+ *
+ * - unknown_node_type: type not in IR_NODE_TYPES and not in LARAVEL_TO_IR
+ * - legacy_node_type:  type is a known legacy string (present in LARAVEL_TO_IR)
+ * - unknown_edge_relation: relation not in IR_EDGE_RELATIONS and not in LEGACY_EDGE_RELATIONS
+ * - legacy_edge_relation:  relation is in LEGACY_EDGE_RELATIONS (known but not IR)
+ *
+ * Conformance = no unknown_* violations. Legacy violations are migration debt,
+ * not failures.
+ */
+export function validateGraph(graph: {
+  nodes: Array<{ id: string; type: string }>
+  edges: Array<{ from: string; to: string; relation: string }>
+}): { conformant: boolean; violations: GraphViolation[] } {
+  const violations: GraphViolation[] = []
+
+  for (const node of graph.nodes) {
+    if (IR_TYPE_SET.has(node.type)) continue
+    if (LEGACY_NODE_SET.has(node.type)) {
+      violations.push({ kind: "legacy_node_type", id: node.id, value: node.type })
+    } else {
+      violations.push({ kind: "unknown_node_type", id: node.id, value: node.type })
+    }
+  }
+
+  for (const edge of graph.edges) {
+    const key = `${edge.from}→${edge.to}`
+    if (IR_EDGE_SET.has(edge.relation)) continue
+    if (LEGACY_EDGE_SET.has(edge.relation)) {
+      violations.push({ kind: "legacy_edge_relation", edgeKey: key, value: edge.relation })
+    } else {
+      violations.push({ kind: "unknown_edge_relation", edgeKey: key, value: edge.relation })
+    }
+  }
+
+  const conformant = !violations.some(
+    (v) => v.kind === "unknown_node_type" || v.kind === "unknown_edge_relation"
+  )
+
+  return { conformant, violations }
 }

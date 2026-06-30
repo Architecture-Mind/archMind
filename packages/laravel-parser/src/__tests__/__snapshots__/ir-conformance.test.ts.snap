@@ -1,0 +1,13 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`IR conformance — graph-augmenter (route + augment) tracks legacy edge relations after augmentation (snapshot) 1`] = `[]`;
+
+exports[`IR conformance — graph-augmenter (route + augment) tracks legacy node types after augmentation (snapshot) 1`] = `[]`;
+
+exports[`IR conformance — route-parser (no augmentation) all edge relations are valid IR (legacy relations are migration debt) 1`] = `
+[
+  "next_middleware",
+]
+`;
+
+exports[`IR conformance — route-parser (no augmentation) all node types are valid IR (legacy types are migration debt, not failures) 1`] = `[]`;
