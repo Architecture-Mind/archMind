@@ -1,28 +1,49 @@
 import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
-import { IR_NODE_TYPES, MUTATION_METHODS } from "@kidkender/archmind-protocol"
+import { MUTATION_METHODS } from "@kidkender/archmind-protocol"
 import { NodeQuery } from "./node-query.js"
 import { EdgeQuery } from "./edge-query.js"
+import {
+  SecurityQuery,
+  TransactionQuery,
+  MessagingQuery,
+  DataQuery,
+  CallsQuery,
+} from "./namespaces.js"
 
 /**
  * Fluent query builder for a single IntermediateExecutionGraph.
  *
- * Create via the `query()` factory:
+ * Three layers:
+ *   Layer 1  graph.nodes / graph.edges          — raw structural access
+ *   Layer 2  query(graph)                        — semantic facts (this class)
+ *   Layer 3  detectors                           — combine facts into findings
+ *
+ * GraphQuery only exposes *facts* about the graph.
+ * It never encodes detector logic or combines facts into findings.
+ *
+ * Usage:
  *   const q = query(graph)
  *
- * Low-level:
+ *   // Low-level
  *   q.nodes().ofType(IR_NODE_TYPES.AUTH_GATE).exists()
  *   q.edges().ofRelation(IR_EDGE_RELATIONS.CALLS).from(nodeId).toArray()
  *
- * High-level semantic shortcuts:
- *   q.hasAuth()
- *   q.hasTransaction()
- *   q.isAuthenticatedMutation()
+ *   // Namespaced fact accessors
+ *   q.security().hasAuthentication()
+ *   q.transaction().exists()
+ *   q.transaction().hasEscape()
+ *   q.messaging().hasDispatch()
+ *   q.data().hasTenantContext()
+ *   q.calls().count()
+ *
+ *   // HTTP method fact
+ *   q.isMutation()
  */
 export class GraphQuery {
   constructor(readonly graph: IntermediateExecutionGraph) {}
 
   // ---------------------------------------------------------------------------
-  // Low-level entry points
+  // Layer 1 — raw structural entry points
   // ---------------------------------------------------------------------------
 
   /** Start a node query over all nodes in this graph. */
@@ -36,76 +57,41 @@ export class GraphQuery {
   }
 
   // ---------------------------------------------------------------------------
-  // Semantic predicates — replace boilerplate boolean checks in detectors
+  // Layer 2 — namespaced fact accessors
   // ---------------------------------------------------------------------------
 
-  /** True if any auth_gate (middleware authentication) node exists. */
-  hasAuth(): boolean {
-    return this.nodes().ofType(IR_NODE_TYPES.AUTH_GATE).exists()
+  /** Authentication and authorization facts. */
+  security(): SecurityQuery {
+    return new SecurityQuery(this.graph, this.nodes())
   }
 
-  /** True if any authz_check (policy / role check) node exists. */
-  hasAuthorization(): boolean {
-    return this.nodes().ofType(IR_NODE_TYPES.AUTHZ_CHECK).exists()
+  /** Transaction boundary, write, and escape facts. */
+  transaction(): TransactionQuery {
+    return new TransactionQuery(this.nodes())
   }
 
-  /** True if any txn_boundary node exists. */
-  hasTransaction(): boolean {
-    return this.nodes().ofType(IR_NODE_TYPES.TXN_BOUNDARY).exists()
+  /** Async dispatch, queue, event, notification, and mail facts. */
+  messaging(): MessagingQuery {
+    return new MessagingQuery(this.nodes())
   }
 
-  /** True if any tenant_context node exists. */
-  hasTenantContext(): boolean {
-    return this.nodes().ofType(IR_NODE_TYPES.TENANT_CONTEXT).exists()
+  /** Tenant context and data isolation facts. */
+  data(): DataQuery {
+    return new DataQuery(this.nodes())
   }
 
-  /** True if any unscoped_query or unscoped_write node exists. */
-  hasUnscopedAccess(): boolean {
-    return (
-      this.nodes().ofType(IR_NODE_TYPES.UNSCOPED_QUERY).exists() ||
-      this.nodes().ofType(IR_NODE_TYPES.UNSCOPED_WRITE).exists()
-    )
+  /** Outbound service/dependency call facts. */
+  calls(): CallsQuery {
+    return new CallsQuery(this.graph, this.nodes())
   }
 
-  /** True if any txn_escape node exists (side-effect inside transaction). */
-  hasTransactionEscape(): boolean {
-    return this.nodes().ofType(IR_NODE_TYPES.TXN_ESCAPE).exists()
-  }
+  // ---------------------------------------------------------------------------
+  // HTTP method fact — not namespaced; it is a property of the route itself
+  // ---------------------------------------------------------------------------
 
   /** True if the HTTP method is a mutation (POST / PUT / PATCH / DELETE). */
   isMutation(): boolean {
     return MUTATION_METHODS.has((this.graph.method ?? "").toUpperCase())
-  }
-
-  /**
-   * True if the route is authenticated but NOT authorized.
-   * Classic missing-authorization pattern.
-   */
-  isAuthenticatedMutation(): boolean {
-    return this.isMutation() && this.hasAuth() && !this.hasAuthorization()
-  }
-
-  /**
-   * True if the route has a tenant context but also has unscoped data access.
-   * Classic missing-tenant-scope pattern.
-   */
-  hasTenantIsolationRisk(): boolean {
-    return this.hasTenantContext() && this.hasUnscopedAccess()
-  }
-
-  /** True if any queue_job or event_dispatch node exists. */
-  hasAsyncDispatch(): boolean {
-    return (
-      this.nodes().ofType(IR_NODE_TYPES.QUEUE_JOB).exists() ||
-      this.nodes().ofType(IR_NODE_TYPES.EVENT_DISPATCH).exists()
-    )
-  }
-
-  /** Number of distinct service class names called by the controller. */
-  serviceCallCount(): number {
-    const services = this.nodes().ofType(IR_NODE_TYPES.SERVICE_CALL).toArray()
-    const classes = new Set(services.map((n) => n.symbol.split("::")[0]).filter(Boolean))
-    return classes.size
   }
 }
 
