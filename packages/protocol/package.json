@@ -1,6 +1,6 @@
 {
   "name": "@kidkender/archmind-protocol",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Shared type vocabulary for the ArchMind ecosystem — IR graph types, validation contracts, runtime correlation types.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
