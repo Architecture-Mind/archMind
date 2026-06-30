@@ -11,6 +11,9 @@ import { runVerify } from "./commands/verify.js"
 import { runFindings } from "./commands/findings.js"
 import { runDeps } from "./commands/deps.js"
 import { runBaseline } from "./commands/baseline.js"
+import { runDiff } from "./commands/diff.js"
+import { runBenchmark } from "./commands/benchmark.js"
+import { runExplain } from "./commands/explain.js"
 
 function parseFlags(rawArgs: string[]): { flags: Record<string, string>; positional: string[] } {
   const flags: Record<string, string> = {}
@@ -42,13 +45,19 @@ function main(): void {
       "archmind — execution topology intelligence for Laravel and NestJS",
       "",
       "Deterministic commands (no LLM required):",
-      "  archmind trace    --project <path> [\"METHOD /route\"] [--json]  Show execution graph",
-      "  archmind verify   --project <path> [--label <n>] [--update]   Topology regression check",
-      "                    --baseline-dir <path>                        Override baseline storage dir",
-      "  archmind findings --project <path> [\"METHOD /route\"] [--json] List static findings",
-      "  archmind deps     --project <path> <ServiceClass>             Cross-route impact",
-      "  archmind baseline update|verify --project <path>             Manage baseline",
-      "                    --baseline-dir <path>                        Default: <project>/.archmind/baselines",
+      "  archmind trace     --project <path> [\"METHOD /route\"] [--json]            Show execution graph",
+      "  archmind verify    --project <path> [--label <n>] [--update]              Topology regression check",
+      "                     --baseline-dir <path>                                   Override baseline storage dir",
+      "  archmind diff      --project <path> [--label <n>] [--format text|markdown|json]  Topology diff (PR-ready)",
+      "  archmind findings  --project <path> [\"METHOD /route\"] [--json]            List static findings",
+      "  archmind deps      --project <path> <ServiceClass>                        Cross-route impact",
+      "  archmind baseline  update|verify --project <path>                         Manage baseline",
+      "                     --baseline-dir <path>                                   Default: <project>/.archmind/baselines",
+      "  archmind benchmark --project <path> --pains-dir <dir>                     Run semantic-pain benchmark",
+      "                     [--id <LARAVEL-AUTH-001>] [--framework laravel|nestjs]",
+      "                     [--output results.json] [--explain]",
+      "  archmind explain   --project <path> --route \"METHOD /path\"                Show execution path + findings",
+      "                     --project <path> --finding <type>                       All routes with this finding",
       "",
       "  Frameworks: Laravel (auto-detected via composer.json / artisan)",
       "              NestJS  (auto-detected via package.json / nest-cli.json)",
@@ -95,6 +104,27 @@ function main(): void {
 
   if (command === "baseline") {
     runBaseline(positional[0], flags)
+    return
+  }
+
+  if (command === "diff") {
+    runDiff(flags).catch((e: unknown) => {
+      console.error(e instanceof Error ? e.message : String(e))
+      process.exit(2)
+    })
+    return
+  }
+
+  if (command === "benchmark") {
+    runBenchmark(flags).catch((e: unknown) => {
+      console.error(e instanceof Error ? e.message : String(e))
+      process.exit(2)
+    })
+    return
+  }
+
+  if (command === "explain") {
+    runExplain(flags)
     return
   }
 
