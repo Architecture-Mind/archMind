@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@archmind/protocol": "npm:@kidkender/archmind-protocol@^0.2.1",
-    "@archmind/graph-query": "*"
+    "@kidkender/archmind-graph-query": "*"
   },
   "devDependencies": {
     "@archmind/laravel-parser": "*",

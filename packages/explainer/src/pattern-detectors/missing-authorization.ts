@@ -1,7 +1,7 @@
 import type { SemanticFact, AuthorizationCheckFact } from "../fact-extraction/types.js"
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
 import { IR_NODE_TYPES } from "@archmind/protocol"
-import { query } from "@archmind/graph-query"
+import { query } from "@kidkender/archmind-graph-query"
 import type { Finding, Evidence } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"

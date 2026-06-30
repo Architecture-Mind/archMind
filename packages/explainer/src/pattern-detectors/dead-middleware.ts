@@ -1,5 +1,5 @@
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import { query } from "@archmind/graph-query"
+import { query } from "@kidkender/archmind-graph-query"
 import type { Finding } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
