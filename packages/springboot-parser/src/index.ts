@@ -1,0 +1,5 @@
+export { SpringBootAdapter, parseSpringBootProject } from "./adapter.js"
+export { isSpringBootProject } from "./detect.js"
+export { parseControllerFile } from "./controller-parser.js"
+export { emitGraph } from "./ir-emitter.js"
+export type { SpringControllerMethod, AuthAnnotation, ServiceCall, DataAccessCall, EventPublication } from "./types.js"

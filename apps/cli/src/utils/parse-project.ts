@@ -9,7 +9,21 @@ import {
 import { parseNestJSProject } from "@archmind/nestjs-parser"
 import type { IntermediateExecutionGraph } from "@archmind/protocol"
 
-export type Framework = "laravel" | "nestjs" | "unknown"
+export type Framework = "laravel" | "nestjs" | "springboot" | "unknown"
+
+function tryParseSpringBoot(root: string): IntermediateExecutionGraph[] | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { isSpringBootProject, parseSpringBootProject } = require("@kidkender/archmind-springboot-parser") as {
+      isSpringBootProject: (root: string) => boolean
+      parseSpringBootProject: (root: string) => IntermediateExecutionGraph[]
+    }
+    if (!isSpringBootProject(root)) return null
+    return parseSpringBootProject(root)
+  } catch {
+    return null
+  }
+}
 
 export interface ParsedProject {
   graphs:      IntermediateExecutionGraph[]
@@ -48,6 +62,7 @@ export function detectFramework(projectRoot: string): Framework {
   // Fallback heuristics
   if (existsSync(join(projectRoot, "artisan"))) return "laravel"
   if (existsSync(join(projectRoot, "nest-cli.json"))) return "nestjs"
+  if (existsSync(join(projectRoot, "pom.xml")) || existsSync(join(projectRoot, "build.gradle"))) return "springboot"
 
   return "unknown"
 }
@@ -57,13 +72,12 @@ export function parseProject(projectRoot: string): ParsedProject {
 
   if (framework === "nestjs") {
     const graphs = parseNestJSProject(projectRoot)
-    return {
-      graphs,
-      routeCount: graphs.length,
-      fileCount:  0,
-      projectRoot,
-      framework,
-    }
+    return { graphs, routeCount: graphs.length, fileCount: 0, projectRoot, framework }
+  }
+
+  if (framework === "springboot") {
+    const graphs = tryParseSpringBoot(projectRoot) ?? []
+    return { graphs, routeCount: graphs.length, fileCount: 0, projectRoot, framework }
   }
 
   // Default: Laravel
