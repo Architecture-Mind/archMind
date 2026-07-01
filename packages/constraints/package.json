@@ -1,11 +1,13 @@
 {
   "name": "@kidkender/archmind-constraints",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Architecture constraint engine for ArchMind — enforce architectural rules via AQL in CI",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch"
@@ -18,8 +20,17 @@
     "@types/node": "^20.0.0",
     "typescript": "^5.4.0"
   },
-  "keywords": ["archmind", "constraints", "architecture", "policy-as-code"],
+  "keywords": [
+    "archmind",
+    "constraints",
+    "architecture",
+    "policy-as-code"
+  ],
   "license": "MIT",
-  "engines": { "node": ">=18" },
-  "publishConfig": { "access": "public" }
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

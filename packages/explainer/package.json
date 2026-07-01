@@ -1,6 +1,6 @@
 {
   "name": "@kidkender/archmind-explainer",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Explanation engine for ArchMind — fact extraction, pattern detection, evidence packaging, and finding ranking for Laravel/NestJS execution graphs.",
   "type": "module",
   "main": "dist/index.js",
