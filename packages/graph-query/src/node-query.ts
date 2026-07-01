@@ -96,6 +96,12 @@ export class NodeQuery {
     )
   }
 
+  /** Narrow to nodes whose IDs are in the given array. */
+  byIds(ids: string[]): NodeQuery {
+    const idSet = new Set(ids)
+    return new NodeQuery(this.graph, this._nodes.filter((n) => idSet.has(n.id)))
+  }
+
   // ---------------------------------------------------------------------------
   // Terminals
   // ---------------------------------------------------------------------------
@@ -112,7 +118,17 @@ export class NodeQuery {
     return this._nodes[0]
   }
 
+  /** Find a single node by exact ID, or undefined. */
+  byId(id: string): ExecutionNode | undefined {
+    return this._nodes.find((n) => n.id === id)
+  }
+
   toArray(): ExecutionNode[] {
     return this._nodes.slice()
+  }
+
+  /** Build an id→node map for efficient lookup. */
+  toMap(): Map<string, ExecutionNode> {
+    return new Map(this._nodes.map((n) => [n.id, n]))
   }
 }

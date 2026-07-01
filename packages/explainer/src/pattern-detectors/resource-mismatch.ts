@@ -23,21 +23,17 @@ interface ResourceRef {
 }
 
 function getAuthorizedResources(graph: IntermediateExecutionGraph): ResourceRef[] {
-  return query(graph).edges().ofRelation(IR_EDGE_RELATIONS.AUTHORIZES).toArray()
-    .flatMap((e) => {
-      const resourceNode = graph.nodes.find((n) => n.id === e.to && n.type === IR_NODE_TYPES.RESOURCE)
-      if (!resourceNode) return []
-      return [{ nodeId: resourceNode.id, className: resourceNode.symbol }]
-    })
+  const q = query(graph)
+  return q.edges().ofRelation(IR_EDGE_RELATIONS.AUTHORIZES).toNodes()
+    .ofType(IR_NODE_TYPES.RESOURCE).toArray()
+    .map((n) => ({ nodeId: n.id, className: n.symbol }))
 }
 
 function getAccessedResources(graph: IntermediateExecutionGraph): ResourceRef[] {
-  return query(graph).edges().ofRelation(IR_EDGE_RELATIONS.ACCESSES).toArray()
-    .flatMap((e) => {
-      const resourceNode = graph.nodes.find((n) => n.id === e.to && n.type === IR_NODE_TYPES.RESOURCE)
-      if (!resourceNode) return []
-      return [{ nodeId: resourceNode.id, className: resourceNode.symbol }]
-    })
+  const q = query(graph)
+  return q.edges().ofRelation(IR_EDGE_RELATIONS.ACCESSES).toNodes()
+    .ofType(IR_NODE_TYPES.RESOURCE).toArray()
+    .map((n) => ({ nodeId: n.id, className: n.symbol }))
 }
 
 export function detectResourceMismatch(
@@ -53,7 +49,7 @@ export function detectResourceMismatch(
   const findings: Finding[] = []
   const authorizedClasses = new Set(authorized.map((r) => r.className))
 
-  const ctrlNode = graph.nodes.find((n) => n.type === IR_NODE_TYPES.BUSINESS_HANDLER)
+  const ctrlNode = query(graph).nodes().ofType(IR_NODE_TYPES.BUSINESS_HANDLER).first()
 
   // RESOURCE_UNPROTECTED: accessed resource has no matching authorizes edge
   for (const acc of accessed) {
@@ -114,10 +110,9 @@ export function detectResourceMismatch(
 
       // authorized A ≠ any accessed resource — this is a mismatch
       for (const acc of accessed) {
-        const authzNode = graph.nodes.find((n) => {
-          const edge = graph.edges.find((e) => e.to === auth.nodeId && e.relation === IR_EDGE_RELATIONS.AUTHORIZES)
-          return edge ? n.id === edge.from : false
-        })
+        const authzNode = query(graph).edges()
+          .ofRelation(IR_EDGE_RELATIONS.AUTHORIZES).to(auth.nodeId)
+          .fromNodes().first()
 
         findings.push({
           id: `${FINDING_TYPES.RESOURCE_MISMATCH}-${stableHash([auth.nodeId, acc.nodeId])}`,
