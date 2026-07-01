@@ -10,10 +10,17 @@ await build({
   outfile:     "dist/index.cjs",
   // Native modules + large packages kept as real npm deps
   external: [
-    "tree-sitter",
-    "tree-sitter-php",
-    "ts-morph",         // ships TypeScript compiler (~20MB) — too large to bundle
-    "typescript",       // ts-morph peer dep
+    "tree-sitter", "tree-sitter-php", "tree-sitter-java",
+    "ts-morph", "typescript",
+    // workspace packages — resolved at runtime via npm install
+    "@kidkender/archmind-protocol",
+    "@kidkender/archmind-graph-query",
+    "@kidkender/archmind-context",
+    "@kidkender/archmind-explainer",
+    "@archmind/retrieval",
+    "@archmind/runtime-ingest",
+    "@archmind/runtime-correlator",
+    "@archmind/nestjs-parser",
   ],
   logLevel: "warning",
 })

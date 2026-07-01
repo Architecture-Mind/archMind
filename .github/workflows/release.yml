@@ -35,8 +35,53 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build all packages
-        run: npm run build --workspaces --if-present
+      # Build @kidkender/ packages in topological order so dist/ files exist
+      # when downstream packages compile against them (avoids TS "no exported member" errors)
+      - name: Build packages in dependency order
+        run: |
+          node << 'EOF'
+          const fs   = require("fs")
+          const path = require("path")
+          const { execSync } = require("child_process")
+
+          const SCOPE = "@kidkender/"
+          const dirs  = [
+            ...fs.readdirSync("packages").map(d => `packages/${d}`),
+            "apps/cli",
+          ]
+
+          const pkgs = []
+          for (const dir of dirs) {
+            const pkgPath = path.join(dir, "package.json")
+            if (!fs.existsSync(pkgPath)) continue
+            const p = JSON.parse(fs.readFileSync(pkgPath, "utf-8"))
+            if (!p.name.startsWith(SCOPE) || !p.scripts?.build) continue
+            const allDeps = { ...p.dependencies, ...p.devDependencies, ...p.peerDependencies }
+            pkgs.push({ name: p.name, dir, deps: Object.keys(allDeps).filter(k => k.startsWith(SCOPE)) })
+          }
+
+          // Kahn's topological sort
+          const idx      = Object.fromEntries(pkgs.map((p, i) => [p.name, i]))
+          const inDegree = new Array(pkgs.length).fill(0)
+          const adj      = pkgs.map(() => [])
+          for (const [i, pkg] of pkgs.entries()) {
+            for (const dep of pkg.deps) {
+              if (idx[dep] !== undefined) { adj[idx[dep]].push(i); inDegree[i]++ }
+            }
+          }
+          const queue  = pkgs.map((_, i) => i).filter(i => inDegree[i] === 0)
+          const sorted = []
+          while (queue.length) {
+            const i = queue.shift()
+            sorted.push(pkgs[i])
+            for (const j of adj[i]) { if (--inDegree[j] === 0) queue.push(j) }
+          }
+
+          for (const pkg of sorted) {
+            console.log(`\nBuilding ${pkg.name}...`)
+            execSync("npm run build", { cwd: pkg.dir, stdio: "inherit" })
+          }
+          EOF
 
       # Compute publish order via topological sort (dependencies before dependents)
       - name: Compute publish order

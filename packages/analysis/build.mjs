@@ -10,7 +10,12 @@ await build({
   platform: "node",
   format:   "cjs",
   outfile:  join(__dirname, "dist/analysis.cjs"),
-  external: ["tree-sitter", "tree-sitter-php", "ts-morph"],
+  external: [
+    "tree-sitter", "tree-sitter-php", "ts-morph",
+    "@kidkender/archmind-protocol",
+    "@kidkender/archmind-laravel-parser",
+    "@kidkender/archmind-nestjs-parser",
+  ],
   minify:   false,
 })
 
