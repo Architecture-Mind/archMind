@@ -26,7 +26,7 @@ export function detectCircularDependency(
   const serviceNodes = q.nodes().ofType(IR_NODE_TYPES.SERVICE_CALL).toArray()
   if (serviceNodes.length < 2) return []
 
-  const nodeById = new Map(graph.nodes.map((n) => [n.id, n]))
+  const nodeById = q.nodes().toMap()
 
   // Build class-level adjacency: className → Set<className it calls>
   const classAdj = new Map<string, Set<string>>()

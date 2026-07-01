@@ -15,12 +15,12 @@ interface EscapeGroup {
 function findEscapeGroups(graph: IntermediateExecutionGraph): EscapeGroup[] {
   const q = query(graph)
   // escapes_transaction edges: escape → transaction_boundary
-  const escapeEdges = q.edges().ofRelation("escapes_transaction").toArray()
+  const escapeEdges = q.edges().ofRelation("escapes_transaction")
   const groups: EscapeGroup[] = []
 
-  for (const edge of escapeEdges) {
-    const txnNode    = graph.nodes.find((n) => n.id === edge.to   && n.type === IR_NODE_TYPES.TXN_BOUNDARY)
-    const escapeNode = graph.nodes.find((n) => n.id === edge.from && n.type === IR_NODE_TYPES.TXN_ESCAPE)
+  for (const edge of escapeEdges.toArray()) {
+    const txnNode    = escapeEdges.to(edge.to).toNodes().ofType(IR_NODE_TYPES.TXN_BOUNDARY).first()
+    const escapeNode = escapeEdges.from(edge.from).fromNodes().ofType(IR_NODE_TYPES.TXN_ESCAPE).first()
     if (!txnNode || !escapeNode) continue
     groups.push({
       transactionNodeId: txnNode.id,

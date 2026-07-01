@@ -1,0 +1,35 @@
+{
+  "name": "@kidkender/archmind-aql",
+  "version": "0.2.0",
+  "description": "Architecture Query Language for ArchMind — FIND routes WHERE auth AND NOT transaction",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@kidkender/archmind-graph-query": "*"
+  },
+  "devDependencies": {
+    "@kidkender/archmind-protocol": "*",
+    "typescript": "^5.4.0"
+  },
+  "keywords": [
+    "archmind",
+    "query",
+    "dsl",
+    "static-analysis"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

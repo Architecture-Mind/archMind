@@ -16,6 +16,7 @@ await build({
   external: [
     "tree-sitter",
     "tree-sitter-php",
+    "tree-sitter-java",
   ],
   logLevel: "warning",
 })

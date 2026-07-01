@@ -36,17 +36,13 @@ function detectHierarchyGroups(
     hierarchyNodeIds.add(e.to)
   }
 
-  const policyNodes = graph.nodes.filter(
-    (n) => n.type === "ir:authz_check" || n.type.toLowerCase() === "policy"
-  )
+  const policyNodes = q.nodes().ofType("ir:authz_check", "policy").toArray()
 
   for (const policy of policyNodes) {
-    const permEdges = graph.edges.filter(
-      (e) =>
-        e.from === policy.id &&
-        (e.relation === "checks_permission" || e.relation === "uses_permission") &&
-        hierarchyNodeIds.has(e.to)
-    )
+    const permEdges = [
+      ...q.edges().from(policy.id).ofRelation("checks_permission").toArray(),
+      ...q.edges().from(policy.id).ofRelation("uses_permission").toArray(),
+    ].filter((e) => hierarchyNodeIds.has(e.to))
 
     if (permEdges.length < 2) continue
 
@@ -77,7 +73,8 @@ export function detectPrivilegeHierarchy(
   _facts: SemanticFact[],
   graph: IntermediateExecutionGraph
 ): Finding[] {
-  if (!query(graph).edges().ofRelation("privilege_hierarchy").exists()) return []
+  const q = query(graph)
+  if (!q.edges().ofRelation("privilege_hierarchy").exists()) return []
   const groups = detectHierarchyGroups(graph)
   const findings: Finding[] = []
 
@@ -104,13 +101,8 @@ export function detectPrivilegeHierarchy(
       },
     ]
 
-    const elevatedNodes = group.elevatedPermIds
-      .map((id) => graph.nodes.find((n) => n.id === id))
-      .filter(Boolean)
-
-    const basicNodes = group.basicPermIds
-      .map((id) => graph.nodes.find((n) => n.id === id))
-      .filter(Boolean)
+    const elevatedNodes = q.nodes().byIds(group.elevatedPermIds).toArray()
+    const basicNodes    = q.nodes().byIds(group.basicPermIds).toArray()
 
     const evidence: Evidence[] = [
       {
@@ -118,14 +110,14 @@ export function detectPrivilegeHierarchy(
         description: `Policy checks ${allPermIds.length} permission tier(s)`,
       },
       ...elevatedNodes.map((n) => ({
-        nodeId: n!.id,
+        nodeId: n.id,
         description: `Elevated permission tier — should grant MORE access than basic`,
-        detail: n!.symbol,
+        detail: n.symbol,
       })),
       ...basicNodes.map((n) => ({
-        nodeId: n!.id,
+        nodeId: n.id,
         description: `Basic permission tier`,
-        detail: n!.symbol,
+        detail: n.symbol,
       })),
     ]
 

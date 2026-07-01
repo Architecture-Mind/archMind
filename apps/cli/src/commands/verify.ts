@@ -8,6 +8,45 @@ import {
 } from "@archmind/retrieval"
 import { parseProject, requireProject } from "../utils/parse-project.js"
 
+// Constraints are optional — loaded dynamically so the CLI works without the package.
+function tryCheckConstraints(
+  projectRoot: string,
+  graphs: unknown[],
+): { ok: boolean; report: string } | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require("@kidkender/archmind-constraints")
+    const config = mod.loadConstraints(projectRoot)
+    if (!config) return null
+    const report = mod.checkConstraints(config, graphs)
+    return { ok: report.ok, report: formatConstraintReport(report) }
+  } catch {
+    return null   // package not installed — silently skip
+  }
+}
+
+function formatConstraintReport(report: {
+  ok: boolean
+  violations: Array<{ rule: { name: string; severity: string; message?: string }; routes: string[] }>
+  total_violations: number
+  checked: number
+}): string {
+  const lines: string[] = []
+  if (report.ok) {
+    lines.push(`Constraints: PASSED — ${report.checked} rule(s) satisfied`)
+    return lines.join("\n")
+  }
+  lines.push(`Constraint violations (${report.violations.length} rule(s), ${report.total_violations} route(s)):`)
+  for (const v of report.violations) {
+    const msg = v.rule.message ? ` — ${v.rule.message}` : ""
+    lines.push(`  [${v.rule.severity}] ${v.rule.name}${msg}`)
+    for (const route of v.routes) {
+      lines.push(`    ${route}`)
+    }
+  }
+  return lines.join("\n")
+}
+
 export async function runVerify(flags: Record<string, string>): Promise<void> {
   const projectRoot  = requireProject(flags)
   const label        = flags["label"] ?? "topology-main"
@@ -82,17 +121,35 @@ export async function runVerify(flags: Record<string, string>): Promise<void> {
   }
 
   const stable = routeCount - result.drifts.length - result.new_routes.length - result.removed_routes.length
-  if (result.ok) {
+
+  // --- Architecture Constraints (optional) ---
+  const constraintResult = tryCheckConstraints(projectRoot, graphs)
+  if (constraintResult) {
+    if (constraintResult.ok) {
+      console.log(constraintResult.report)
+    } else {
+      console.error(constraintResult.report)
+    }
+    console.log()
+  }
+
+  const failed = !result.ok || (constraintResult !== null && !constraintResult.ok)
+
+  if (!failed) {
     console.log(`PASSED (${label}) — ${stable}/${routeCount} routes stable`)
     if (result.new_routes.length > 0) {
       console.log(`  (${result.new_routes.length} new route(s) — run with --update to accept)`)
     }
     process.exit(0)
   } else {
-    console.error(`FAILED (${label})`)
-    console.error(`  Stable: ${stable}  Regressions: ${result.drifts.filter((d) => d.changed).length}  Removed: ${result.removed_routes.length}`)
-    console.error()
-    console.error("Run with --update to accept the new baseline if this drift is intentional.")
+    if (!result.ok) {
+      console.error(`FAILED (${label})`)
+      console.error(`  Stable: ${stable}  Regressions: ${result.drifts.filter((d) => d.changed).length}  Removed: ${result.removed_routes.length}`)
+      console.error()
+      console.error("Run with --update to accept the new baseline if this drift is intentional.")
+    } else {
+      console.error("FAILED — architecture constraint violations detected.")
+    }
     process.exit(1)
   }
 }

@@ -1,5 +1,6 @@
 import type { SemanticFact } from "../fact-extraction/types.js"
 import type { IntermediateExecutionGraph, ExecutionNode } from "@archmind/protocol"
+import { query } from "@kidkender/archmind-graph-query"
 import type { Finding, ReasoningStep, Evidence } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"
@@ -24,20 +25,21 @@ export function detectDoublePermissionCheck(
   _facts: SemanticFact[],
   graph: IntermediateExecutionGraph
 ): Finding[] {
+  const q = query(graph)
+
   // middleware authorization_check nodes with an explicit permission arg
-  const middlewareChecks = graph.nodes.filter(
-    (n) => n.type === "authorization_check" && n.args && n.args.length > 0
-  )
+  const middlewareChecks = q.nodes().ofType("authorization_check").toArray()
+    .filter((n) => n.args && n.args.length > 0)
   if (middlewareChecks.length === 0) return []
 
   // policy → PermissionService edges
   const policyServicePairs: Array<{ policy: ExecutionNode; permService: ExecutionNode }> = []
-  for (const edge of graph.edges) {
-    const toNode = graph.nodes.find((n) => n.id === edge.to)
-    if (!toNode || !isPermissionServiceNode(toNode)) continue
-    const fromNode = graph.nodes.find((n) => n.id === edge.from)
-    if (!fromNode || fromNode.type !== "policy") continue
-    policyServicePairs.push({ policy: fromNode, permService: toNode })
+  for (const policy of q.nodes().ofType("policy").toArray()) {
+    for (const svc of q.edges().from(policy.id).toNodes().toArray()) {
+      if (isPermissionServiceNode(svc)) {
+        policyServicePairs.push({ policy, permService: svc })
+      }
+    }
   }
   if (policyServicePairs.length === 0) return []
 

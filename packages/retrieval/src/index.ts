@@ -7,3 +7,5 @@ export { captureBaseline, verifyBaseline, saveBaseline, loadBaseline, CRITICAL_N
 export type { RetrievalBaseline, RetrievalBaselineEntry, BaselineDrift, BaselineVerifyResult } from "./retrieval-baseline.js"
 export { captureTopologyBaseline, verifyTopologyBaseline, saveTopologyBaseline, loadTopologyBaseline, DANGER_NODE_TYPES } from "./topology-baseline.js"
 export type { TopologyBaseline, TopologyBaselineEntry, TopologyDrift, TopologyVerifyResult } from "./topology-baseline.js"
+export { saveSnapshot, listSnapshots, loadSnapshot, getRouteHistory, diffSnapshots } from "./history.js"
+export type { SnapshotMeta, RouteHistory, RouteHistoryEntry } from "./history.js"

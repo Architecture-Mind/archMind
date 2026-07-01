@@ -1,0 +1,36 @@
+{
+  "name": "@kidkender/archmind-context",
+  "version": "0.2.0",
+  "description": "AI Context API for ArchMind — transforms execution graphs into structured semantic context for LLMs",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@kidkender/archmind-graph-query": "*"
+  },
+  "devDependencies": {
+    "@kidkender/archmind-protocol": "*",
+    "typescript": "^5.4.0"
+  },
+  "keywords": [
+    "archmind",
+    "context",
+    "ai",
+    "llm",
+    "mcp"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

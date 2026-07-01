@@ -1,4 +1,5 @@
 import type { ExecutionEdge, IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
+import { NodeQuery } from "./node-query.js"
 
 /**
  * Fluent builder for querying edges in a single execution graph.
@@ -52,6 +53,22 @@ export class EdgeQuery {
       return fromNode?.type === fromType && toNode?.type === toType
     })
     return new EdgeQuery(this.graph, kept)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Node resolution
+  // ---------------------------------------------------------------------------
+
+  /** NodeQuery of all to-side nodes of the current edge set. */
+  toNodes(): NodeQuery {
+    const ids = new Set(this._edges.map((e) => e.to))
+    return new NodeQuery(this.graph, this.graph.nodes.filter((n) => ids.has(n.id)))
+  }
+
+  /** NodeQuery of all from-side nodes of the current edge set. */
+  fromNodes(): NodeQuery {
+    const ids = new Set(this._edges.map((e) => e.from))
+    return new NodeQuery(this.graph, this.graph.nodes.filter((n) => ids.has(n.id)))
   }
 
   // ---------------------------------------------------------------------------

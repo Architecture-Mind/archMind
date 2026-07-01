@@ -14,12 +14,12 @@ interface UnscopedQueryGroup {
 function findUnscopedGroups(graph: IntermediateExecutionGraph): UnscopedQueryGroup[] {
   const q = query(graph)
   // missing_tenant_scope edges: unscoped_query → runtime_injection
-  const missingEdges = q.edges().ofRelation("missing_tenant_scope").toArray()
+  const missingEdges = q.edges().ofRelation("missing_tenant_scope")
   const groups: UnscopedQueryGroup[] = []
 
-  for (const edge of missingEdges) {
-    const unscopedNode  = graph.nodes.find((n) => n.id === edge.from && n.type === "unscoped_query")
-    const injectionNode = graph.nodes.find((n) => n.id === edge.to   && n.type === "runtime_injection")
+  for (const edge of missingEdges.toArray()) {
+    const unscopedNode  = missingEdges.from(edge.from).fromNodes().ofType("unscoped_query").first()
+    const injectionNode = missingEdges.to(edge.to).toNodes().ofType("runtime_injection").first()
     if (!unscopedNode || !injectionNode) continue
     groups.push({
       unscopedNodeId:  unscopedNode.id,

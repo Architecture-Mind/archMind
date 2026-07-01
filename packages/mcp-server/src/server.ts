@@ -339,6 +339,55 @@ export function createServer(): McpServer {
   )
 
   server.registerTool(
+    "archmind_get_context",
+    {
+      description:
+        "Return a structured semantic context object for a route — pre-digested for LLM consumption. " +
+        "Instead of raw graph nodes, returns a compact summary with security posture, transaction state, " +
+        "validation, services, async side-effects, and a risk level. " +
+        "Use this instead of archmind_get_execution_graph when you want to reason about a route without navigating raw nodes.",
+      inputSchema: {
+        project_root: z.string().describe("Absolute path to the project root (Laravel or NestJS)"),
+        entrypoint: z
+          .string()
+          .optional()
+          .describe('Entrypoint in "METHOD /path" format. Omit to get context for ALL routes (returns array).'),
+      },
+    },
+    async ({ project_root, entrypoint }) => {
+      const graphs = getGraphs(project_root)
+
+      let buildFn: (g: unknown, f: unknown[]) => unknown
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const mod = require("@kidkender/archmind-context")
+        buildFn = mod.buildSemanticContext
+      } catch {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ error: "@kidkender/archmind-context not installed" }) }],
+          isError: true,
+        }
+      }
+
+      if (!entrypoint) {
+        const all = graphs.map((g) => buildFn(g, []))
+        return { content: [{ type: "text", text: JSON.stringify(all, null, 2) }] }
+      }
+
+      const graph = graphs.find((g) => g.entrypoint === entrypoint)
+      if (!graph) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ error: `No graph for: ${entrypoint}` }) }],
+          isError: true,
+        }
+      }
+
+      const ctx = buildFn(graph, [])
+      return { content: [{ type: "text", text: JSON.stringify(ctx, null, 2) }] }
+    }
+  )
+
+  server.registerTool(
     "archmind_invalidate_cache",
     {
       description:

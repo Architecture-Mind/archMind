@@ -1,0 +1,63 @@
+# ArchMind Topology Guard — GitHub Actions workflow template
+#
+# Paste this into your Laravel/NestJS project repo at:
+#   .github/workflows/topology-guard.yml
+#
+# First-time setup (run once in your project, commit the result):
+#   archmind verify --project . --update
+#   git add .archmind/baselines/
+#   git commit -m "chore: add archmind topology baseline"
+
+name: ArchMind Topology Guard
+
+on:
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  topology-guard:
+    name: Topology diff
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write   # needed to post PR comment
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install archmind
+        run: npm install -g @kidkender/archmind
+
+      # Generate the Markdown diff and capture it as a step output.
+      # The command exits 0 (stable) or 1 (regression) — we capture both.
+      - name: Generate topology diff
+        id: diff
+        run: |
+          set +e
+          OUTPUT=$(archmind diff --project . --format markdown 2>&1)
+          EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          {
+            echo "body<<ARCHMIND_EOF"
+            echo "$OUTPUT"
+            echo "ARCHMIND_EOF"
+          } >> "$GITHUB_OUTPUT"
+          exit 0   # always succeed so the comment step runs
+
+      # Post (or update) a sticky comment on the PR.
+      # Requires: actions/github-script or marocchino/sticky-pull-request-comment
+      - name: Post PR comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: archmind-topology
+          message: ${{ steps.diff.outputs.body }}
+
+      # Now actually fail the job if there was a regression.
+      - name: Fail on topology regression
+        if: steps.diff.outputs.exit_code != '0'
+        run: |
+          echo "Topology regression detected — see PR comment for details."
+          exit 1

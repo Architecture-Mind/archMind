@@ -45,5 +45,8 @@
   "files": [
     "dist/lsp.cjs",
     "README.md"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }

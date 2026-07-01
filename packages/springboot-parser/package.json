@@ -1,0 +1,36 @@
+{
+  "name": "@kidkender/archmind-springboot-parser",
+  "version": "0.2.0",
+  "description": "Static analysis parser for Spring Boot projects — extracts REST controllers, security annotations, @Transactional boundaries, and service call graphs into ArchMind IR.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "archmind",
+    "spring-boot",
+    "java",
+    "parser",
+    "static-analysis"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js"
+  },
+  "dependencies": {
+    "@kidkender/archmind-protocol": "^0.2.0",
+    "tree-sitter": "^0.21.0",
+    "tree-sitter-java": "^0.23.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

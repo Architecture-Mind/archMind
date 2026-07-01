@@ -1,6 +1,6 @@
 {
   "name": "@kidkender/archmind-graph-query",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Fluent query API for ArchMind execution graphs — replaces ad-hoc graph.nodes.filter() patterns with semantic, composable queries.",
   "type": "module",
   "main": "dist/index.js",
