@@ -18,6 +18,7 @@ import { runContext } from "./commands/context.js"
 import { runSnapshot } from "./commands/snapshot.js"
 import { runHistory } from "./commands/history.js"
 import { runExplain } from "./commands/explain.js"
+import { runVisualize } from "./commands/visualize.js"
 
 function parseFlags(rawArgs: string[]): { flags: Record<string, string>; positional: string[] } {
   const flags: Record<string, string> = {}
@@ -69,6 +70,7 @@ function main(): void {
       "                     --diff --from <id> --to <id>                           Diff two snapshots",
       "  archmind explain   --project <path> --route \"METHOD /path\"                Show execution path + findings",
       "                     --project <path> --finding <type>                       All routes with this finding",
+      "  archmind visualize --project <path> [--output report.html] [--open]        Execution Timeline HTML report",
       "",
       "  Frameworks: Laravel (auto-detected via composer.json / artisan)",
       "              NestJS  (auto-detected via package.json / nest-cli.json)",
@@ -156,6 +158,14 @@ function main(): void {
 
   if (command === "explain") {
     runExplain(flags)
+    return
+  }
+
+  if (command === "visualize") {
+    runVisualize(flags).catch((e: unknown) => {
+      console.error(e instanceof Error ? e.message : String(e))
+      process.exit(2)
+    })
     return
   }
 
