@@ -37,8 +37,14 @@ const EVENT_PUBLISHER_PATTERNS  = ["eventPublisher", "applicationEventPublisher"
 /**
  * Parse all Spring REST controller methods from a Java source file.
  * Returns an empty array if the file is not a controller or fails to parse.
+ *
+ * @param baseClassIndex  Optional map of simple class name → @RequestMapping path
+ *                        for resolving inherited URL prefixes.
  */
-export function parseControllerFile(filePath: string): SpringControllerMethod[] {
+export function parseControllerFile(
+  filePath: string,
+  baseClassIndex?: Map<string, string>,
+): SpringControllerMethod[] {
   let source: string
   try {
     source = readFileSync(filePath, "utf-8")
@@ -62,8 +68,20 @@ export function parseControllerFile(filePath: string): SpringControllerMethod[] 
     if (!classMods) continue
     if (!hasAnnotation(classMods, CONTROLLER_ANNS)) continue
 
-    const className   = classNode.childForFieldName("name")?.text ?? "UnknownController"
-    const classPath   = getRequestMappingPath(classMods)
+    const className = classNode.childForFieldName("name")?.text ?? "UnknownController"
+
+    // Resolve class-level path: own @RequestMapping OR inherited from base class
+    let classPath = getRequestMappingPath(classMods)
+    if (!classPath && baseClassIndex) {
+      // superclass field text is "extends ClassName" — strip the keyword
+      const superclassText = classNode.childForFieldName("superclass")?.text ?? ""
+      const baseClass = superclassText.replace(/^extends\s+/, "").trim() ||
+                        (extractExtendsFromSource(source, className) ?? "")
+      if (baseClass && baseClassIndex.has(baseClass)) {
+        classPath = baseClassIndex.get(baseClass)!
+      }
+    }
+
     const classTxn    = hasAnnotation(classMods, new Set(["Transactional"]))
 
     // Collect injected fields: fieldName → className
@@ -445,5 +463,16 @@ function extractFirstArgText(inv: Parser.SyntaxNode): string {
 
 function extractNewClassName(text: string): string | null {
   const m = text.match(/new\s+(\w+)\s*\(/)
+  return m?.[1] ?? null
+}
+
+/**
+ * Regex fallback to extract the base class name from `class Foo extends Bar`.
+ * Used when tree-sitter doesn't expose the superclass field.
+ */
+function extractExtendsFromSource(source: string, ownClassName: string): string | null {
+  // Look for "class <ownClassName> extends <Base>"
+  const pattern = new RegExp(`class\\s+${ownClassName}\\s+extends\\s+(\\w+)`)
+  const m = source.match(pattern)
   return m?.[1] ?? null
 }

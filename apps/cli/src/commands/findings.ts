@@ -36,8 +36,10 @@ export function runFindings(flags: Record<string, string>, positional: string[])
   }
 
   if (isJson) {
-    console.log(JSON.stringify(allFindings, null, 2))
-    process.exit(allFindings.length > 0 ? 1 : 0)
+    // Use exitCode + return so stdout flushes before the process ends
+    process.exitCode = allFindings.length > 0 ? 1 : 0
+    process.stdout.write(JSON.stringify(allFindings, null, 2) + "\n")
+    return
   }
 
   if (allFindings.length === 0) {

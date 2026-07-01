@@ -1,20 +1,32 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "fs"
 import { join } from "path"
 
-/** Walk src/main/java and return all .java file paths. */
+/**
+ * Walk src/main/java under the root (handles multi-module Maven projects where
+ * multiple sub-directories each have their own src/main/java tree).
+ */
 export function findJavaFiles(root: string): string[] {
-  const candidates = [
-    join(root, "src", "main", "java"),
-    join(root, "src"),          // flat layout (test fixtures)
-    root,                        // single-dir layout
-  ]
-  for (const dir of candidates) {
-    if (existsSync(dir)) {
-      const files = walkJava(dir)
-      if (files.length) return files
+  // Try the root itself first (single-module or test fixtures)
+  const singleSrc = join(root, "src", "main", "java")
+  if (existsSync(singleSrc)) return walkJava(singleSrc)
+
+  // Multi-module: each top-level sub-dir may have its own src/main/java
+  const out: string[] = []
+  try {
+    for (const entry of readdirSync(root)) {
+      const sub = join(root, entry)
+      if (!statSync(sub).isDirectory()) continue
+      const javaSrc = join(sub, "src", "main", "java")
+      if (existsSync(javaSrc)) {
+        out.push(...walkJava(javaSrc))
+      }
     }
-  }
-  return []
+  } catch { /* permission error */ }
+
+  if (out.length) return out
+
+  // Flat fallback for test fixtures / unusual layouts
+  return walkJava(root)
 }
 
 function walkJava(dir: string): string[] {
