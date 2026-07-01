@@ -221,13 +221,13 @@ function getHttpMethod(modifiers: Parser.SyntaxNode): HttpMethod | null {
     if (HTTP_MAPPING_ANNS[name]) return HTTP_MAPPING_ANNS[name]
     if (name === "RequestMapping") {
       const method = getRequestMappingMethod(child)
-      return (method as HttpMethod) ?? "GET"
+      return method
     }
   }
   return null
 }
 
-function getRequestMappingMethod(node: Parser.SyntaxNode): string {
+function getRequestMappingMethod(node: Parser.SyntaxNode): HttpMethod {
   const argList = node.childForFieldName("arguments")
   if (!argList) return "GET"
   // Look for method = RequestMethod.POST
