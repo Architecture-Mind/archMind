@@ -12,11 +12,18 @@ await build({
   banner: {
     js: "#!/usr/bin/env node",
   },
-  // Native modules cannot be bundled — mark as external
+  // Native modules and workspace packages — resolved at runtime via npm install
   external: [
-    "tree-sitter",
-    "tree-sitter-php",
-    "tree-sitter-java",
+    "tree-sitter", "tree-sitter-php", "tree-sitter-java",
+    "@archmind/explainer",
+    "@archmind/laravel-parser",
+    "@archmind/nestjs-parser",
+    "@archmind/llm-client",
+    "@archmind/orchestrator",
+    "@archmind/protocol",
+    "@archmind/retrieval",
+    "@archmind/scorer",
+    "@kidkender/archmind-protocol",
   ],
   logLevel: "warning",
 })
