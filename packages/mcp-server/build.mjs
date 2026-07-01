@@ -12,15 +12,18 @@ await build({
   external: [
     "tree-sitter", "tree-sitter-php", "tree-sitter-java",
     "ts-morph", "typescript",
-    // workspace packages — resolved at runtime via npm install
+    // all workspace packages — resolved at runtime via npm install
     "@kidkender/archmind-protocol",
     "@kidkender/archmind-graph-query",
     "@kidkender/archmind-context",
     "@kidkender/archmind-explainer",
+    "@archmind/protocol",
+    "@archmind/explainer",
+    "@archmind/laravel-parser",
+    "@archmind/nestjs-parser",
     "@archmind/retrieval",
     "@archmind/runtime-ingest",
     "@archmind/runtime-correlator",
-    "@archmind/nestjs-parser",
   ],
   logLevel: "warning",
 })
