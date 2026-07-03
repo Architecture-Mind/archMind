@@ -26,9 +26,17 @@ export function emitGraph(m: SpringControllerMethod): IntermediateExecutionGraph
   // ------------------------------------------------------------------
   const guardIds: string[] = []
   for (const ann of m.authAnnotations) {
-    const type = classifyAuthAnnotation(ann)
-    const n = node(type, formatAuthSymbol(ann))
-    guardIds.push(n.id)
+    if (ann.isAuthOnly) {
+      const n = node(IR_NODE_TYPES.AUTH_GATE, formatAuthSymbol(ann))
+      guardIds.push(n.id)
+      continue
+    }
+    // A role/permission/authority check always requires authentication first —
+    // emit both nodes so `no-auth` queries don't false-negative on protected routes.
+    const authGate   = node(IR_NODE_TYPES.AUTH_GATE, "isAuthenticated()")
+    const authzCheck = node(IR_NODE_TYPES.AUTHZ_CHECK, formatAuthSymbol(ann))
+    edge(authGate.id, authzCheck.id, "ir:guards")
+    guardIds.push(authzCheck.id)
   }
 
   // ------------------------------------------------------------------
@@ -134,21 +142,6 @@ export function emitGraph(m: SpringControllerMethod): IntermediateExecutionGraph
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function classifyAuthAnnotation(ann: AuthAnnotation): string {
-  if (ann.isAuthOnly) return IR_NODE_TYPES.AUTH_GATE
-  // Any role/permission/authority check = authz
-  if (
-    ann.expression.includes("hasRole") ||
-    ann.expression.includes("hasAuthority") ||
-    ann.expression.includes("hasPermission") ||
-    ann.expression.includes("hasAnyRole") ||
-    ann.kind === "secured" ||
-    ann.kind === "rolesAllowed"
-  ) return IR_NODE_TYPES.AUTHZ_CHECK
-  // Generic @PreAuthorize that isn't purely isAuthenticated
-  return IR_NODE_TYPES.AUTHZ_CHECK
-}
 
 function formatAuthSymbol(ann: AuthAnnotation): string {
   switch (ann.kind) {

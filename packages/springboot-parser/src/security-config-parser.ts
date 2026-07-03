@@ -8,7 +8,10 @@ export interface SecurityRule {
   pattern:       string                              // e.g. "/*/api/public/**"
   type:          "permit" | "authenticated" | "role" | "deny"
   roles:         string[]                            // for type === "role"
-  irAuthType:    "ir:auth_gate" | "ir:authz_check" | null  // null = public
+  // Ordered node types to inject before the handler. A role/permission check always
+  // requires authentication first, so "role" rules resolve to [auth_gate, authz_check],
+  // not just [authz_check] — otherwise `no-auth` queries false-negative on protected routes.
+  irAuthTypes:   Array<"ir:auth_gate" | "ir:authz_check">
 }
 
 /**
@@ -139,29 +142,30 @@ function buildRule(
 ): Omit<SecurityRule, "pattern"> {
   switch (authFn) {
     case "permitAll":
-      return { type: "permit", roles: [], irAuthType: null }
+      return { type: "permit", roles: [], irAuthTypes: [] }
 
     case "denyAll":
-      return { type: "deny", roles: [], irAuthType: null }
+      return { type: "deny", roles: [], irAuthTypes: [] }
 
     case "authenticated":
-      return { type: "authenticated", roles: [], irAuthType: "ir:auth_gate" }
+      return { type: "authenticated", roles: [], irAuthTypes: ["ir:auth_gate"] }
 
     case "hasRole":
     case "hasAnyRole": {
       const roles = extractStringArgs(authArgs)
-      // Role check regardless of whether we could resolve the role name from enum refs
-      return { type: "role", roles, irAuthType: "ir:authz_check" }
+      // Role check regardless of whether we could resolve the role name from enum refs.
+      // A role check implies authentication happened first.
+      return { type: "role", roles, irAuthTypes: ["ir:auth_gate", "ir:authz_check"] }
     }
 
     case "hasAuthority":
     case "hasAnyAuthority": {
       const roles = extractStringArgs(authArgs)
-      return { type: "role", roles, irAuthType: "ir:authz_check" }
+      return { type: "role", roles, irAuthTypes: ["ir:auth_gate", "ir:authz_check"] }
     }
 
     default:
-      return { type: "authenticated", roles: [], irAuthType: "ir:auth_gate" }
+      return { type: "authenticated", roles: [], irAuthTypes: ["ir:auth_gate"] }
   }
 }
 

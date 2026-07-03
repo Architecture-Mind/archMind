@@ -1,12 +1,13 @@
 import { randomUUID } from "crypto"
 import type { IntermediateExecutionGraph, ExecutionNode, ExecutionEdge } from "@kidkender/archmind-protocol"
 import type { SemanticAdapter } from "@kidkender/archmind-protocol"
-import { IR_NODE_TYPES, IR_VERSION } from "@kidkender/archmind-protocol"
+import { IR_NODE_TYPES, IR_EDGE_RELATIONS, IR_VERSION } from "@kidkender/archmind-protocol"
 import { findJavaFiles, isControllerFile } from "./scanner.js"
 import { parseControllerFile } from "./controller-parser.js"
 import { emitGraph } from "./ir-emitter.js"
 import { buildBaseClassIndex } from "./inheritance-resolver.js"
 import { parseSecurityConfigs, matchSecurityRule, type SecurityRule } from "./security-config-parser.js"
+import { buildServiceTransactionIndex, type ServiceTransactionIndex } from "./service-transaction-index.js"
 
 export class SpringBootAdapter implements SemanticAdapter {
   parseProject(root: string): IntermediateExecutionGraph[] {
@@ -16,6 +17,7 @@ export class SpringBootAdapter implements SemanticAdapter {
     // Build cross-file indices once
     const baseClassIndex = buildBaseClassIndex(allFiles)
     const securityRules  = parseSecurityConfigs(allFiles)
+    const txnIndex        = buildServiceTransactionIndex(allFiles)
 
     const graphs: IntermediateExecutionGraph[] = []
 
@@ -25,6 +27,7 @@ export class SpringBootAdapter implements SemanticAdapter {
         for (const m of methods) {
           const graph = emitGraph(m)
           injectSecurityNodes(graph, securityRules)
+          injectServiceTransactionNodes(graph, txnIndex)
           graphs.push(graph)
         }
       } catch {
@@ -52,31 +55,75 @@ function injectSecurityNodes(graph: IntermediateExecutionGraph, rules: SecurityR
   if (hasMethodAuth || rules.length === 0) return
 
   const rule = matchSecurityRule(graph.path, rules)
-  if (!rule || rule.irAuthType === null) return  // public endpoint or no match
+  if (!rule || rule.irAuthTypes.length === 0) return  // public endpoint or no match
 
   // Find the first node in the execution flow (typically validation gate or handler)
   const firstNode = findFirstFlowNode(graph)
   if (!firstNode) return
 
-  const authId = `sec_${randomUUID().slice(0, 8)}`
-  const authNode: ExecutionNode = {
-    id:     authId,
-    type:   rule.irAuthType,
-    symbol: rule.roles.length > 0
-      ? `hasRole(${rule.roles.join(", ")})`
-      : "isAuthenticated()",
-    args:   rule.roles,
-  }
+  // Inject one node per auth type, chained in declared order
+  // (e.g. [auth_gate, authz_check] -> auth_gate -> authz_check -> firstNode).
+  // Build from firstNode backward so edges point the right way.
+  let targetId = firstNode.id
+  for (const irType of [...rule.irAuthTypes].reverse()) {
+    const authId = `sec_${randomUUID().slice(0, 8)}`
+    const authNode: ExecutionNode = {
+      id:     authId,
+      type:   irType,
+      symbol: irType === "ir:authz_check" && rule.roles.length > 0
+        ? `hasRole(${rule.roles.join(", ")})`
+        : "isAuthenticated()",
+      args:   rule.roles,
+    }
+    graph.nodes.unshift(authNode)
 
-  graph.nodes.unshift(authNode)
-
-  const edge: ExecutionEdge = {
-    from:          authId,
-    to:            firstNode.id,
-    relation:      "ir:guards",
-    traceability:  "static",
+    const edge: ExecutionEdge = {
+      from:          authId,
+      to:            targetId,
+      relation:      "ir:guards",
+      traceability:  "static",
+    }
+    graph.edges.unshift(edge)
+    targetId = authId
   }
-  graph.edges.unshift(edge)
+}
+
+// ---------------------------------------------------------------------------
+// Post-emit: inject a txn_boundary node before service calls whose resolved
+// service method carries @Transactional (Spring convention puts it on the
+// *Impl class, not the controller — see service-transaction-index.ts).
+// ---------------------------------------------------------------------------
+
+function injectServiceTransactionNodes(graph: IntermediateExecutionGraph, txnIndex: ServiceTransactionIndex): void {
+  const serviceCallNodes = graph.nodes.filter((n) => n.type === IR_NODE_TYPES.SERVICE_CALL)
+
+  for (const svcNode of serviceCallNodes) {
+    const sep = svcNode.symbol.indexOf("::")
+    if (sep === -1) continue
+    const fieldType = svcNode.symbol.slice(0, sep)
+    const method    = svcNode.symbol.slice(sep + 2)
+    if (!txnIndex.isTransactional(fieldType, method)) continue
+
+    const incoming = graph.edges.filter((e) => e.to === svcNode.id)
+    if (incoming.length === 0) continue
+
+    const txnId = `svctxn_${randomUUID().slice(0, 8)}`
+    const txnNode: ExecutionNode = {
+      id:     txnId,
+      type:   IR_NODE_TYPES.TXN_BOUNDARY,
+      symbol: `@Transactional (${svcNode.symbol})`,
+    }
+    graph.nodes.push(txnNode)
+
+    for (const e of incoming) e.to = txnId
+
+    graph.edges.push({
+      from:         txnId,
+      to:           svcNode.id,
+      relation:     IR_EDGE_RELATIONS.CALLS,
+      traceability: "static",
+    })
+  }
 }
 
 /**
