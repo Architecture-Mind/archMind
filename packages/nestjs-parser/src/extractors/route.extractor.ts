@@ -1,6 +1,7 @@
 import { Project } from "ts-morph"
 import type { Decorator } from "ts-morph"
 import path from "path"
+import { readdirSync, readFileSync, statSync } from "fs"
 import type { NestJSSemanticRoute } from "../types.js"
 import type { GuardDescriptor } from "../types.js"
 import { extractGuards } from "./guard.extractor.js"
@@ -48,6 +49,12 @@ export function extractRoutes(options: RouteExtractorOptions): NestJSSemanticRou
     project.addSourceFilesAtPaths(
       path.join(projectRoot, "**/*.controller.ts").replace(/\\/g, "/")
     )
+    // @Cron jobs commonly live outside *.controller.ts (services, dedicated
+    // job/task files). Cheap text pre-filter avoids loading the whole
+    // project into ts-morph just to find a handful of cron methods.
+    for (const file of findFilesContaining(projectRoot, "@Cron", [".controller.ts"])) {
+      try { project.addSourceFileAtPath(file) } catch { /* already added or unreadable */ }
+    }
   }
 
   const routes: NestJSSemanticRoute[] = []
@@ -59,65 +66,150 @@ export function extractRoutes(options: RouteExtractorOptions): NestJSSemanticRou
 
     for (const cls of sourceFile.getClasses()) {
       const controllerDec = cls.getDecorator("Controller")
-      if (!controllerDec) continue
-
-      const { prefix, version: ctrlVersion } = resolveControllerDecArgs(controllerDec)
-      const controllerGuards = [
-        ...extractGuards(cls.getDecorators(), userConfig),
-        ...extractCustomDecoratorGuards(cls.getDecorators(), customDecorators),
-      ]
-      const controllerIsPublic = Boolean(cls.getDecorator("Public"))
-
-      for (const method of cls.getMethods()) {
-        const httpDec = method.getDecorators().find(d => HTTP_METHOD_MAP[d.getName()])
-        if (!httpDec) continue
-
-        const httpMethod = HTTP_METHOD_MAP[httpDec.getName()]
-        const methodPath = resolveMethodPath(httpDec)
-        // Method-level @Version() takes precedence over controller-level
-        const version = resolveMethodVersion(method.getDecorators()) ?? ctrlVersion
-        const fullPath = buildVersionedPath(prefix, methodPath, version)
-
-        const methodIsPublic = Boolean(method.getDecorator("Public"))
-        const isPublic = controllerIsPublic || methodIsPublic
-
-        const methodGuards = [
-          ...extractGuards(method.getDecorators(), userConfig),
-          ...extractCustomDecoratorGuards(method.getDecorators(), customDecorators),
+      if (controllerDec) {
+        const { prefix, version: ctrlVersion } = resolveControllerDecArgs(controllerDec)
+        const controllerGuards = [
+          ...extractGuards(cls.getDecorators(), userConfig),
+          ...extractCustomDecoratorGuards(cls.getDecorators(), customDecorators),
         ]
-        // @Public() suppresses guard inheritance from controller level
-        const guards = isPublic ? [] : [...controllerGuards, ...methodGuards]
+        const controllerIsPublic = Boolean(cls.getDecorator("Public"))
 
-        const { dto, validationPipe } = extractDto(method)
-        const sideEffects  = extractSideEffects(cls, method)
+        for (const method of cls.getMethods()) {
+          const httpDec = method.getDecorators().find(d => HTTP_METHOD_MAP[d.getName()])
+          if (!httpDec) continue
+
+          const httpMethod = HTTP_METHOD_MAP[httpDec.getName()]
+          const methodPath = resolveMethodPath(httpDec)
+          // Method-level @Version() takes precedence over controller-level
+          const version = resolveMethodVersion(method.getDecorators()) ?? ctrlVersion
+          const fullPath = buildVersionedPath(prefix, methodPath, version)
+
+          const methodIsPublic = Boolean(method.getDecorator("Public"))
+          const isPublic = controllerIsPublic || methodIsPublic
+
+          const methodGuards = [
+            ...extractGuards(method.getDecorators(), userConfig),
+            ...extractCustomDecoratorGuards(method.getDecorators(), customDecorators),
+          ]
+          // @Public() suppresses guard inheritance from controller level
+          const guards = isPublic ? [] : [...controllerGuards, ...methodGuards]
+
+          const { dto, validationPipe } = extractDto(method)
+          const sideEffects  = extractSideEffects(cls, method)
+          let serviceCalls: ReturnType<typeof extractServiceCalls> = []
+          try { serviceCalls = extractServiceCalls(cls, method) } catch { /* skip on parse error */ }
+          let transactions: ReturnType<typeof extractTransactions> = []
+          try { transactions = extractTransactions(cls, method) } catch { /* skip on parse error */ }
+          let responseResource: ReturnType<typeof extractResponseResource> = null
+          try { responseResource = extractResponseResource(cls, method, project, projectRoot) } catch { /* skip on parse error */ }
+
+          routes.push({
+            kind: "http",
+            method: httpMethod,
+            path: fullPath,
+            symbol: `${cls.getName() ?? "UnknownController"}::${method.getName()}`,
+            controllerClass: cls.getName() ?? "UnknownController",
+            file: filePath,
+            line: method.getNameNode().getStartLineNumber(),
+            guards,
+            isPublic,
+            validationPipe,
+            dto,
+            sideEffects,
+            serviceCalls,
+            transactions,
+            responseResource,
+          })
+        }
+        continue
+      }
+
+      // Non-controller class: look for @Cron-decorated methods
+      // (@nestjs/schedule jobs commonly live in @Injectable() services).
+      for (const method of cls.getMethods()) {
+        const cronDec = method.getDecorator("Cron")
+        if (!cronDec) continue
+
+        const expression = resolveCronExpression(cronDec)
+        const guards = [
+          ...extractGuards(cls.getDecorators(), userConfig),
+          ...extractGuards(method.getDecorators(), userConfig),
+        ]
+        const sideEffects = extractSideEffects(cls, method)
         let serviceCalls: ReturnType<typeof extractServiceCalls> = []
         try { serviceCalls = extractServiceCalls(cls, method) } catch { /* skip on parse error */ }
         let transactions: ReturnType<typeof extractTransactions> = []
         try { transactions = extractTransactions(cls, method) } catch { /* skip on parse error */ }
-        let responseResource: ReturnType<typeof extractResponseResource> = null
-        try { responseResource = extractResponseResource(cls, method, project, projectRoot) } catch { /* skip on parse error */ }
 
         routes.push({
-          method: httpMethod,
-          path: fullPath,
-          symbol: `${cls.getName() ?? "UnknownController"}::${method.getName()}`,
-          controllerClass: cls.getName() ?? "UnknownController",
+          kind: "cron",
+          method: "CRON",
+          path: expression,
+          symbol: `${cls.getName() ?? "UnknownClass"}::${method.getName()}`,
+          controllerClass: cls.getName() ?? "UnknownClass",
           file: filePath,
           line: method.getNameNode().getStartLineNumber(),
           guards,
-          isPublic,
-          validationPipe,
-          dto,
+          isPublic: false,
+          validationPipe: false,
+          dto: null,
           sideEffects,
           serviceCalls,
           transactions,
-          responseResource,
+          responseResource: null,
+          cron: { expression },
         })
       }
     }
   }
 
   return routes
+}
+
+const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".git", "coverage"])
+
+/** Find .ts files (excluding any suffix in `excludeSuffixes` and test/spec files) whose raw text contains `needle`. */
+function findFilesContaining(root: string, needle: string, excludeSuffixes: string[]): string[] {
+  const out: string[] = []
+  walkForNeedle(root, needle, excludeSuffixes, out)
+  return out
+}
+
+function walkForNeedle(dir: string, needle: string, excludeSuffixes: string[], out: string[]): void {
+  let entries: string[]
+  try {
+    entries = readdirSync(dir)
+  } catch {
+    return
+  }
+  for (const entry of entries) {
+    if (SKIP_DIRS.has(entry)) continue
+    const full = path.join(dir, entry)
+    let stat: ReturnType<typeof statSync>
+    try {
+      stat = statSync(full)
+    } catch {
+      continue
+    }
+    if (stat.isDirectory()) {
+      walkForNeedle(full, needle, excludeSuffixes, out)
+      continue
+    }
+    if (!entry.endsWith(".ts") || entry.endsWith(".spec.ts") || entry.endsWith(".test.ts")) continue
+    if (excludeSuffixes.some((suffix) => entry.endsWith(suffix))) continue
+    try {
+      const content = readFileSync(full, "utf-8")
+      if (content.includes(needle)) out.push(full)
+    } catch {
+      // unreadable file — skip
+    }
+  }
+}
+
+function resolveCronExpression(dec: Decorator): string {
+  const args = dec.getCallExpression()?.getArguments() ?? []
+  if (!args.length) return "unknown"
+  return args[0].getText().replace(/^['"`]|['"`]$/g, "")
 }
 
 function resolveControllerDecArgs(dec: Decorator): { prefix: string; version: string | null } {

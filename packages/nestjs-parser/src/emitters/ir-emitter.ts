@@ -1,4 +1,4 @@
-import type { IntermediateExecutionGraph, ExecutionNode, ExecutionEdge, DTOSchema } from "@kidkender/archmind-protocol"
+import type { IntermediateExecutionGraph, ExecutionNode, ExecutionEdge, DTOSchema, EntrypointDescriptor } from "@kidkender/archmind-protocol"
 import { IR_VERSION, IR_NODE_TYPES } from "@kidkender/archmind-protocol"
 import type { NestJSSemanticRoute } from "../types.js"
 
@@ -184,15 +184,13 @@ function emitGraph(
     })
   }
 
+  const { entrypoint, source } = buildEntrypoint(route)
+
   return {
-    entrypoint: `${route.method} ${route.path}`,
+    entrypoint,
     method: route.method,
     path: route.path,
-    source: {
-      type: "http",
-      id: `${route.method} ${route.path}`,
-      metadata: { method: route.method, path: route.path },
-    },
+    source,
     nodes,
     edges,
     annotations: [],
@@ -204,4 +202,28 @@ function emitGraph(
 
 function slug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "_")
+}
+
+function buildEntrypoint(route: NestJSSemanticRoute): { entrypoint: string; source: EntrypointDescriptor } {
+  if (route.kind === "cron" && route.cron) {
+    const id = `${route.controllerClass}::${route.symbol.split("::")[1] ?? "handle"}`
+    return {
+      entrypoint: id,
+      source: {
+        type:     "cron",
+        id,
+        metadata: { expression: route.cron.expression },
+      },
+    }
+  }
+
+  const id = `${route.method} ${route.path}`
+  return {
+    entrypoint: id,
+    source: {
+      type:     "http",
+      id,
+      metadata: { method: route.method, path: route.path },
+    },
+  }
 }
