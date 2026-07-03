@@ -53,6 +53,7 @@ function main(): void {
       "  archmind trace     --project <path> [\"METHOD /route\"] [--json]            Show execution graph",
       "  archmind verify    --project <path> [--label <n>] [--update]              Topology regression check",
       "                     --baseline-dir <path>                                   Override baseline storage dir",
+      "                     --constraints <path.yml>                                Custom architecture rules (default: .archmind/constraints.yml)",
       "  archmind diff      --project <path> [--label <n>] [--format text|markdown|json]  Topology diff (PR-ready)",
       "  archmind findings  --project <path> [\"METHOD /route\"] [--json]            List static findings",
       "  archmind deps      --project <path> <ServiceClass>                        Cross-route impact",

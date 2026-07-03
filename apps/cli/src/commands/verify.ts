@@ -8,21 +8,45 @@ import {
 } from "@archmind/retrieval"
 import { parseProject, requireProject } from "../utils/parse-project.js"
 
+interface ConstraintReportShape {
+  ok: boolean
+  violations: Array<{ rule: { name: string; severity: string; message?: string }; routes: string[] }>
+  total_violations: number
+  checked: number
+}
+
 // Constraints are optional — loaded dynamically so the CLI works without the package.
+// When `constraintsFile` is explicitly passed (--constraints flag), a missing file
+// or missing package is a hard error rather than a silent skip.
 function tryCheckConstraints(
   projectRoot: string,
   graphs: unknown[],
+  constraintsFile?: string,
 ): { ok: boolean; report: string } | null {
+  let mod: { loadConstraints: (root: string, file?: string) => unknown; checkConstraints: (config: unknown, graphs: unknown[]) => ConstraintReportShape }
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require("@kidkender/archmind-constraints")
-    const config = mod.loadConstraints(projectRoot)
-    if (!config) return null
-    const report = mod.checkConstraints(config, graphs)
-    return { ok: report.ok, report: formatConstraintReport(report) }
+    mod = require("@kidkender/archmind-constraints")
   } catch {
+    if (constraintsFile) {
+      throw new Error("--constraints was passed but @kidkender/archmind-constraints is not installed")
+    }
     return null   // package not installed — silently skip
   }
+
+  const config = constraintsFile
+    ? mod.loadConstraints(projectRoot, constraintsFile)
+    : mod.loadConstraints(projectRoot)
+
+  if (!config) {
+    if (constraintsFile) {
+      throw new Error(`--constraints file not found: ${constraintsFile}`)
+    }
+    return null
+  }
+
+  const report = mod.checkConstraints(config, graphs)
+  return { ok: report.ok, report: formatConstraintReport(report) }
 }
 
 function formatConstraintReport(report: {
@@ -122,8 +146,8 @@ export async function runVerify(flags: Record<string, string>): Promise<void> {
 
   const stable = routeCount - result.drifts.length - result.new_routes.length - result.removed_routes.length
 
-  // --- Architecture Constraints (optional) ---
-  const constraintResult = tryCheckConstraints(projectRoot, graphs)
+  // --- Architecture Constraints (optional, or explicit via --constraints) ---
+  const constraintResult = tryCheckConstraints(projectRoot, graphs, flags["constraints"])
   if (constraintResult) {
     if (constraintResult.ok) {
       console.log(constraintResult.report)
