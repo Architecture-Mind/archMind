@@ -79,11 +79,18 @@ export interface GraphAnnotation {
 
 // Describes the execution entrypoint in a framework-agnostic way.
 // `type` is a free string (not a union) — the ontology is still being discovered.
-// HTTP example:  { type: "http",  id: "POST /orders",     metadata: { method: "POST", path: "/orders" } }
-// Queue example: { type: "queue", id: "ProcessOrderJob",  metadata: { queue: "orders", job: "ProcessOrderJob" } }
+// `trigger` is a normalized, human-readable "what causes this" string — its
+// meaning is fixed per `type` (HTTP: "METHOD /path", queue: destination
+// name, cron: raw schedule expression) so it reads the same regardless of
+// which adapter/framework produced the graph. `metadata` still carries
+// type-specific structured detail beyond the single trigger string.
+// HTTP example:  { type: "http",  id: "POST /orders",         trigger: "POST /orders",  metadata: { method: "POST", path: "/orders" } }
+// Queue example: { type: "queue", id: "KafkaListener:orders", trigger: "orders",        metadata: { annotation: "KafkaListener", destination: "orders" } }
+// Cron example:  { type: "cron",  id: "ReportJob::run",       trigger: "0 0 * * * *",   metadata: { expression: "0 0 * * * *" } }
 export interface EntrypointDescriptor {
   type:     string                    // "http" | "queue" | "event" | "cron" | "kafka" | ...
   id:       string                    // canonical identifier — matches graph.entrypoint for HTTP graphs
+  trigger:  string                    // normalized "what causes this" string, same meaning across adapters for a given type
   metadata: Record<string, string>    // type-specific fields
 }
 

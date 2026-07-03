@@ -159,8 +159,9 @@ function buildEntrypoint(m: SpringControllerMethod): {
       method:     "MESSAGE",
       path:       m.messaging.destination,
       source: {
-        type:     "queue",
+        type:    "queue",
         id,
+        trigger: m.messaging.destination,
         metadata: {
           annotation:  m.messaging.annotation,
           destination: m.messaging.destination,
@@ -178,13 +179,13 @@ function buildEntrypoint(m: SpringControllerMethod): {
       method:     "SCHEDULE",
       path:       trigger,
       source: {
-        type:     "cron",
+        type:    "cron",
         id,
-        metadata: {
-          ...(m.schedule.cron ? { cron: m.schedule.cron } : {}),
-          ...(m.schedule.fixedRate ? { fixedRate: m.schedule.fixedRate } : {}),
-          ...(m.schedule.fixedDelay ? { fixedDelay: m.schedule.fixedDelay } : {}),
-        },
+        trigger,
+        // Normalized to a single "expression" key across adapters (matches
+        // NestJS's @Cron metadata) — the raw cron/fixedRate/fixedDelay
+        // distinction is preserved in `trigger`'s value, not the key name.
+        metadata: { expression: trigger },
       },
     }
   }
@@ -197,8 +198,9 @@ function buildEntrypoint(m: SpringControllerMethod): {
     method:     httpMethod,
     path,
     source: {
-      type:     "http",
+      type:    "http",
       id,
+      trigger: id,
       metadata: { method: httpMethod, path },
     },
   }

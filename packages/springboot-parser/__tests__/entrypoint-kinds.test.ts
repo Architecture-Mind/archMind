@@ -51,8 +51,9 @@ describe("parseSpringBootProject — non-HTTP entrypoint kinds", () => {
     expect(graph.method).toBe("MESSAGE")
     expect(graph.path).toBe("orders-created")
     expect(graph.source).toEqual({
-      type: "queue",
-      id:   "KafkaListener:orders-created",
+      type:    "queue",
+      id:      "KafkaListener:orders-created",
+      trigger: "orders-created",
       metadata: { annotation: "KafkaListener", destination: "orders-created", groupId: "order-service" },
     })
   })
@@ -90,9 +91,10 @@ describe("parseSpringBootProject — non-HTTP entrypoint kinds", () => {
     expect(graph.method).toBe("SCHEDULE")
     expect(graph.path).toBe("0 0 * * * *")
     expect(graph.source).toEqual({
-      type: "cron",
-      id:   "ReportJob::generateHourlyReport",
-      metadata: { cron: "0 0 * * * *" },
+      type:    "cron",
+      id:      "ReportJob::generateHourlyReport",
+      trigger: "0 0 * * * *",
+      metadata: { expression: "0 0 * * * *" },
     })
   })
 })

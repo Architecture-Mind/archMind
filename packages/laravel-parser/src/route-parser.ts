@@ -315,6 +315,7 @@ function buildGraph(
     source: {
       type: "http",
       id: `${method} ${path}`,
+      trigger: `${method} ${path}`,
       metadata: { method, path },
     },
     nodes,

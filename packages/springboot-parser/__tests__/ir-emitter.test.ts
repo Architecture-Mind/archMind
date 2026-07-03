@@ -32,6 +32,7 @@ describe("emitGraph — entrypoint descriptor", () => {
     expect(graph.source).toEqual({
       type:     "http",
       id:       "POST /orders",
+      trigger:  "POST /orders",
       metadata: { method: "POST", path: "/orders" },
     })
   })

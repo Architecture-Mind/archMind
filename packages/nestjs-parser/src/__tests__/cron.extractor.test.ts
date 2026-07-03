@@ -31,8 +31,9 @@ describe("extractRoutes — @Cron entrypoints", () => {
     const graphs = emitGraphs(routes)
     expect(graphs).toHaveLength(1)
     expect(graphs[0].source).toEqual({
-      type:     "cron",
-      id:       "ReportService::generateHourlyReport",
+      type:    "cron",
+      id:      "ReportService::generateHourlyReport",
+      trigger: "0 0 * * * *",
       metadata: { expression: "0 0 * * * *" },
     })
   })

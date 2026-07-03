@@ -210,8 +210,9 @@ function buildEntrypoint(route: NestJSSemanticRoute): { entrypoint: string; sour
     return {
       entrypoint: id,
       source: {
-        type:     "cron",
+        type:    "cron",
         id,
+        trigger: route.cron.expression,
         metadata: { expression: route.cron.expression },
       },
     }
@@ -221,8 +222,9 @@ function buildEntrypoint(route: NestJSSemanticRoute): { entrypoint: string; sour
   return {
     entrypoint: id,
     source: {
-      type:     "http",
+      type:    "http",
       id,
+      trigger: id,
       metadata: { method: route.method, path: route.path },
     },
   }
