@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "fs"
 import { join } from "path"
+import { entrypointDetectors } from "./entrypoint-detector.js"
 
 /**
  * Walk src/main/java under the root (handles multi-module Maven projects where
@@ -41,14 +42,15 @@ function walkJava(dir: string): string[] {
   return out
 }
 
-/** Quick pre-filter: does this file look like a Spring controller? */
+/**
+ * Quick pre-filter: does this file look like it contains a known entrypoint
+ * kind (HTTP controller today; Kafka/Scheduled register more detectors in
+ * entrypoint-detector.ts without changing this function).
+ */
 export function isControllerFile(filePath: string): boolean {
   try {
     const src = readFileSync(filePath, "utf-8")
-    return (
-      (src.includes("@RestController") || src.includes("@Controller")) &&
-      (src.includes("Mapping") || src.includes("@RequestMapping"))
-    )
+    return entrypointDetectors.some((detector) => detector.matchesSource(src))
   } catch {
     return false
   }
