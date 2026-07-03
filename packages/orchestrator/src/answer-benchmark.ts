@@ -1,9 +1,9 @@
 import { readdirSync } from "fs"
 import { join } from "path"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import type { LLMClient } from "@archmind/llm-client"
-import { loadGoldenAnswer, scoreAnswer } from "@archmind/scorer"
-import type { GoldenAnswer, AnswerScore } from "@archmind/scorer"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
+import type { LLMClient } from "@kidkender/archmind-llm-client"
+import { loadGoldenAnswer, scoreAnswer } from "@kidkender/archmind-scorer"
+import type { GoldenAnswer, AnswerScore } from "@kidkender/archmind-scorer"
 import { Orchestrator } from "./orchestrator.js"
 
 export interface AnswerBenchmarkTrace {

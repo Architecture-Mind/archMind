@@ -16,9 +16,9 @@
     "ts-morph": "^23.0.0"
   },
   "devDependencies": {
-    "@archmind/laravel-parser": "*",
-    "@archmind/nestjs-parser": "*",
-    "@archmind/protocol": "*",
+    "@kidkender/archmind-laravel-parser": "*",
+    "@kidkender/archmind-nestjs-parser": "*",
+    "@kidkender/archmind-protocol": "*",
     "@kidkender/archmind-analysis": "*",
     "@types/node": "^20.0.0",
     "esbuild": "^0.28.0",

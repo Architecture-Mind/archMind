@@ -21,9 +21,9 @@ import { join, dirname } from "path"
 import { fileURLToPath } from "url"
 import { readdirSync, readFileSync, existsSync } from "fs"
 import yaml from "js-yaml"
-import { parseRouteFile, augmentGraph, loadProjectConfig, resolveAliasMap } from "@archmind/laravel-parser"
-import { buildEvidencePackage } from "@archmind/explainer"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import { parseRouteFile, augmentGraph, loadProjectConfig, resolveAliasMap } from "@kidkender/archmind-laravel-parser"
+import { buildEvidencePackage } from "@kidkender/archmind-explainer"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname  = dirname(__filename)

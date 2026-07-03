@@ -1,5 +1,5 @@
 import type { SemanticFact, RuntimeInjectionFact } from "../fact-extraction/types.js"
-import type { IntermediateExecutionGraph, ExecutionNode } from "@archmind/protocol"
+import type { IntermediateExecutionGraph, ExecutionNode } from "@kidkender/archmind-protocol"
 import type { Finding, ReasoningStep, Evidence } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"

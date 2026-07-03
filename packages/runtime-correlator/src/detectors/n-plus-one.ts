@@ -1,5 +1,5 @@
-import type { OtelSpan, RuntimeFinding } from "@archmind/protocol"
-import type { CorrelatedSession } from "@archmind/protocol"
+import type { OtelSpan, RuntimeFinding } from "@kidkender/archmind-protocol"
+import type { CorrelatedSession } from "@kidkender/archmind-protocol"
 
 const DEFAULT_THRESHOLD = 5
 

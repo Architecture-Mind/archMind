@@ -1,5 +1,5 @@
 {
-  "name": "@archmind/llm-client",
+  "name": "@kidkender/archmind-llm-client",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
-    "@archmind/prompt-builder": "*",
+    "@kidkender/archmind-prompt-builder": "*",
     "openai": "^4.104.0"
   },
   "devDependencies": {

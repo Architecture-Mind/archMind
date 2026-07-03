@@ -1,6 +1,6 @@
 import { readFileSync } from "fs"
 import { join } from "path"
-import type { IntermediateExecutionGraph, ExecutionNode, ExecutionEdge } from "@archmind/protocol"
+import type { IntermediateExecutionGraph, ExecutionNode, ExecutionEdge } from "@kidkender/archmind-protocol"
 
 function extractMethodSnippet(fileContent: string, methodName: string, maxLines = 25): string | null {
   const lines = fileContent.split("\n")

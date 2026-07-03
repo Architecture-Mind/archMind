@@ -1,4 +1,4 @@
-import type { TraceSession, IntermediateExecutionGraph, OtelSpan } from "@archmind/protocol"
+import type { TraceSession, IntermediateExecutionGraph, OtelSpan } from "@kidkender/archmind-protocol"
 import { correlateSession, spansForNode, infraUnderNode } from "../correlate.js"
 
 const makeSpan = (overrides: Partial<OtelSpan>): OtelSpan => ({

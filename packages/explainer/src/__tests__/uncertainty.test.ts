@@ -1,6 +1,6 @@
 import { describe, test, expect } from "@jest/globals"
 import { minConfidence, checkMissingNodes } from "../findings/uncertainty.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 const EMPTY_GRAPH: IntermediateExecutionGraph = {
   entrypoint: "GET /ping",

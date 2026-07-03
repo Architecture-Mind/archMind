@@ -1,11 +1,11 @@
 import { readdirSync } from "fs"
 import { join } from "path"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import type { LLMClient, LLMResponse } from "@archmind/llm-client"
-import { loadGoldenConversation, scoreConversation } from "@archmind/scorer"
-import type { GoldenConversation, ConversationScore } from "@archmind/scorer"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
+import type { LLMClient, LLMResponse } from "@kidkender/archmind-llm-client"
+import { loadGoldenConversation, scoreConversation } from "@kidkender/archmind-scorer"
+import type { GoldenConversation, ConversationScore } from "@kidkender/archmind-scorer"
 import { Orchestrator } from "./orchestrator.js"
-import type { ConversationContext } from "@archmind/protocol"
+import type { ConversationContext } from "@kidkender/archmind-protocol"
 
 export interface ConvBenchmarkEntry {
   golden_id: string

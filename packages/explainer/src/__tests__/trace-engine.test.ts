@@ -1,4 +1,4 @@
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { traceByPattern } from "../trace/trace-engine.js"
 
 // Minimal fixture graphs for unit tests

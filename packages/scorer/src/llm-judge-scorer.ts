@@ -1,4 +1,4 @@
-import type { LLMResponse, JudgeClient } from "@archmind/llm-client"
+import type { LLMResponse, JudgeClient } from "@kidkender/archmind-llm-client"
 import type { GoldenAnswer } from "./golden-answer.js"
 import type { AnswerScore, FieldScore, KeyphraseScore } from "./answer-scorer.js"
 import { scoreAnswer } from "./answer-scorer.js"

@@ -1,5 +1,5 @@
 import type { Finding } from "../findings/types.js"
-import type { ExpectedFinding } from "@archmind/scorer"
+import type { ExpectedFinding } from "@kidkender/archmind-scorer"
 
 export interface ExplainerScoreResult {
   recall: number

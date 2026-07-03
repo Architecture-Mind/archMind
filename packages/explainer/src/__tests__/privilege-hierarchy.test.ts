@@ -1,6 +1,6 @@
 import { describe, test, expect } from "@jest/globals"
 import { detectPrivilegeHierarchy } from "../pattern-detectors/privilege-hierarchy.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 const AUTH_002_GRAPH: IntermediateExecutionGraph = {
   entrypoint: "DELETE /tasks/{id}",

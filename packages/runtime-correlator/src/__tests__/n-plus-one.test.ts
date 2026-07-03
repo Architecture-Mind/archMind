@@ -1,4 +1,4 @@
-import type { OtelSpan, TraceSession, CorrelatedSession } from "@archmind/protocol"
+import type { OtelSpan, TraceSession, CorrelatedSession } from "@kidkender/archmind-protocol"
 import { detectNPlusOne } from "../detectors/n-plus-one.js"
 
 const makeSpan = (overrides: Partial<OtelSpan>): OtelSpan => ({

@@ -12,9 +12,9 @@
  */
 import { join, dirname } from "path"
 import { fileURLToPath } from "url"
-import { parseRouteFile, augmentGraph } from "@archmind/laravel-parser"
-import { parseNestJSProject } from "@archmind/nestjs-parser"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import { parseRouteFile, augmentGraph } from "@kidkender/archmind-laravel-parser"
+import { parseNestJSProject } from "@kidkender/archmind-nestjs-parser"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname  = dirname(__filename)

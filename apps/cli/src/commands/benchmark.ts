@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, statSync, writeFileSync } from "fs"
 import { join, resolve } from "path"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { parseProject, requireProject } from "../utils/parse-project.js"
 
 // ---------------------------------------------------------------------------

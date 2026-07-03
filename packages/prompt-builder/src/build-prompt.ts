@@ -1,5 +1,5 @@
-import type { IntermediateExecutionGraph, ConversationTurn, QueryMode } from "@archmind/protocol"
-import type { Finding } from "@archmind/explainer"
+import type { IntermediateExecutionGraph, ConversationTurn, QueryMode } from "@kidkender/archmind-protocol"
+import type { Finding } from "@kidkender/archmind-explainer"
 import { serializeExecutionPath } from "./serialize-graph.js"
 import { serializeFindings } from "./serialize-findings.js"
 import { detectContradictions, serializeContradictions } from "./detect-contradictions.js"

@@ -1,6 +1,6 @@
 import { retrieve, prune, classifyNode, deduplicate, rankByQuery, pruneBySideEffects } from "../retrieval-engine.js"
-import type { IntermediateExecutionGraph, RetrievalResult } from "@archmind/protocol"
-import { PROTOCOL_VERSION } from "@archmind/protocol"
+import type { IntermediateExecutionGraph, RetrievalResult } from "@kidkender/archmind-protocol"
+import { PROTOCOL_VERSION } from "@kidkender/archmind-protocol"
 
 const AUTH_001_GRAPH: IntermediateExecutionGraph = {
   entrypoint: "PUT /tasks/{task}",

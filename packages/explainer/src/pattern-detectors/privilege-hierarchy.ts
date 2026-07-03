@@ -1,5 +1,5 @@
 import type { SemanticFact } from "../fact-extraction/types.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { query } from "@kidkender/archmind-graph-query"
 import type { Finding, ReasoningStep, Evidence, UncertaintyReason } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"

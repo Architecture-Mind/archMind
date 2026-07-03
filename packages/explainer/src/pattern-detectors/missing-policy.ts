@@ -1,5 +1,5 @@
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import { IR_NODE_TYPES } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
+import { IR_NODE_TYPES } from "@kidkender/archmind-protocol"
 import type { Finding } from "../findings/types.js"
 import { FINDING_TYPES } from "../findings/types.js"
 import { stableHash } from "../findings/stable-hash.js"

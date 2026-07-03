@@ -1,7 +1,7 @@
 import { describe, test, expect } from "@jest/globals"
 import { join, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
-import { loadGoldenTrace } from "@archmind/scorer"
+import { loadGoldenTrace } from "@kidkender/archmind-scorer"
 import { explain } from "../index.js"
 import { goldenTraceToGraph } from "../benchmark/graph-builder.js"
 import { scoreExplainer } from "../benchmark/scorer.js"

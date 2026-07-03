@@ -1,13 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import { getGraphs, invalidate, detectFramework } from "./cache.js"
-import { retrieve, buildDependencyIndex, queryDependents, indexStats } from "@archmind/retrieval"
-import { explain, buildEvidencePackage, traceByPattern } from "@archmind/explainer"
-import type { TracePattern } from "@archmind/explainer"
-import type { RetrievalFocus } from "@archmind/protocol"
-import { PROTOCOL_VERSION } from "@archmind/protocol"
-import { ingestOtlpFile } from "@archmind/runtime-ingest"
-import { correlateSession, detectNPlusOne, detectSlowQuery } from "@archmind/runtime-correlator"
+import { retrieve, buildDependencyIndex, queryDependents, indexStats } from "@kidkender/archmind-retrieval"
+import { explain, buildEvidencePackage, traceByPattern } from "@kidkender/archmind-explainer"
+import type { TracePattern } from "@kidkender/archmind-explainer"
+import type { RetrievalFocus } from "@kidkender/archmind-protocol"
+import { PROTOCOL_VERSION } from "@kidkender/archmind-protocol"
+import { ingestOtlpFile } from "@kidkender/archmind-runtime-ingest"
+import { correlateSession, detectNPlusOne, detectSlowQuery } from "@kidkender/archmind-runtime-correlator"
 
 const FOCUS_VALUES = ["auth", "validation", "runtime", "transaction", "isolation", "side_effects", "all"] as const
 

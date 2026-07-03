@@ -9,9 +9,9 @@
  */
 import { join, dirname } from "path"
 import { fileURLToPath } from "url"
-import { augmentGraph } from "@archmind/laravel-parser"
-import { loadGoldenTrace, scoreRetrieval } from "@archmind/scorer"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import { augmentGraph } from "@kidkender/archmind-laravel-parser"
+import { loadGoldenTrace, scoreRetrieval } from "@kidkender/archmind-scorer"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { retrieve } from "../retrieval-engine.js"
 
 const __filename  = fileURLToPath(import.meta.url)

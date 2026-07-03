@@ -1,4 +1,4 @@
-import type { OtelSpan } from "@archmind/protocol"
+import type { OtelSpan } from "@kidkender/archmind-protocol"
 
 // Infra span patterns that are not graph nodes
 const INFRA_PATTERNS = [

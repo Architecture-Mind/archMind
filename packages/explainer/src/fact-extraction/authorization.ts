@@ -1,4 +1,4 @@
-import type { IntermediateExecutionGraph, ExecutionNode } from "@archmind/protocol"
+import type { IntermediateExecutionGraph, ExecutionNode } from "@kidkender/archmind-protocol"
 import type { AuthorizationCheckFact } from "./types.js"
 
 // Normalize to a short ability token:

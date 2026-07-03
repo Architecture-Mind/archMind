@@ -1,5 +1,5 @@
 import { join } from "path"
-import { getRouteHistory, listSnapshots, diffSnapshots, type TopologyDrift } from "@archmind/retrieval"
+import { getRouteHistory, listSnapshots, diffSnapshots, type TopologyDrift } from "@kidkender/archmind-retrieval"
 import { requireProject } from "../utils/parse-project.js"
 
 export function runHistory(flags: Record<string, string>, positional: string[]): void {

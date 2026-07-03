@@ -6,7 +6,7 @@
  * IntermediateExecutionGraph (framework: "nestjs") and asserts the expected finding.
  */
 
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { extractFacts } from "../fact-extraction/index.js"
 import { detect } from "../pattern-detectors/index.js"
 import { detectFatController } from "../pattern-detectors/fat-controller.js"

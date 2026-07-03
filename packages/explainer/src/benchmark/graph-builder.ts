@@ -1,5 +1,5 @@
-import type { IntermediateExecutionGraph, EdgeTraceability } from "@archmind/protocol"
-import type { GoldenTrace } from "@archmind/scorer"
+import type { IntermediateExecutionGraph, EdgeTraceability } from "@kidkender/archmind-protocol"
+import type { GoldenTrace } from "@kidkender/archmind-scorer"
 
 function parseEntrypoint(entrypoint: string): { method: string; path: string } {
   const parts = entrypoint.trim().split(/\s+/)

@@ -19,8 +19,8 @@ import { join, dirname } from "path"
 import { fileURLToPath } from "url"
 import { writeFileSync, mkdirSync, readdirSync, readFileSync } from "fs"
 import yaml from "js-yaml"
-import { parseRouteFile, augmentGraph, loadProjectConfig, resolveAliasMap } from "@archmind/laravel-parser"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import { parseRouteFile, augmentGraph, loadProjectConfig, resolveAliasMap } from "@kidkender/archmind-laravel-parser"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { runBenchmark } from "../benchmark.js"
 
 const __filename = fileURLToPath(import.meta.url)

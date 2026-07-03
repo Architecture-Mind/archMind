@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach } from "@jest/globals"
 import { extractFacts } from "../fact-extraction/index.js"
 import { detectRuntimeConsumerTrace } from "../pattern-detectors/runtime-consumer-trace.js"
 import { FINDING_TYPES } from "../findings/types.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 // Mirrors real tenant-workspace-api shape for PUT /tasks/{task}
 const TASK_UPDATE_GRAPH: IntermediateExecutionGraph = {

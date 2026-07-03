@@ -1,5 +1,5 @@
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import { IR_NODE_TYPES, IR_EDGE_RELATIONS } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
+import { IR_NODE_TYPES, IR_EDGE_RELATIONS } from "@kidkender/archmind-protocol"
 import { buildExecutionPath } from "../evidence/selector.js"
 import type {
   TracePattern,

@@ -1,4 +1,4 @@
-import type { RuntimeFinding, CorrelatedSession } from "@archmind/protocol"
+import type { RuntimeFinding, CorrelatedSession } from "@kidkender/archmind-protocol"
 
 const DEFAULT_THRESHOLD_MS = 500
 

@@ -1,4 +1,4 @@
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import type { RuntimeInjectionFact } from "./types.js"
 
 // Extract the container key from injection mechanism

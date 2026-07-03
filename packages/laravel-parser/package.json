@@ -1,6 +1,6 @@
 {
   "name": "@kidkender/archmind-laravel-parser",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Static analysis parser for Laravel projects — extracts routes, middleware chains, FormRequest validation rules, and auth patterns into ArchMind IR graphs.",
   "type": "module",
   "main": "dist/index.js",
@@ -36,7 +36,7 @@
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js"
   },
   "dependencies": {
-    "@kidkender/archmind-protocol": "^0.2.0",
+    "@kidkender/archmind-protocol": "^0.4.0",
     "tree-sitter": "^0.21.0",
     "tree-sitter-php": "^0.23.0"
   },

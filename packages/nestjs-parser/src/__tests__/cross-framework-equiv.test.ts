@@ -19,7 +19,7 @@ import {
   augmentGraph,
   inferProjectConfig,
   resolveAliasMap,
-} from "@archmind/laravel-parser"
+} from "@kidkender/archmind-laravel-parser"
 import { parseNestJSProject } from "../adapter.js"
 import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 

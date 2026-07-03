@@ -1,14 +1,14 @@
 import { join } from "path"
 import { readdirSync, readFileSync } from "fs"
 import yaml from "js-yaml"
-import { loadGoldenTrace, scoreRetrieval } from "@archmind/scorer"
-import type { GoldenTrace } from "@archmind/scorer"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import { ingestOtlpFile } from "@archmind/runtime-ingest"
-import { correlateSession, detectNPlusOne, detectSlowQuery } from "@archmind/runtime-correlator"
+import { loadGoldenTrace, scoreRetrieval } from "@kidkender/archmind-scorer"
+import type { GoldenTrace } from "@kidkender/archmind-scorer"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
+import { ingestOtlpFile } from "@kidkender/archmind-runtime-ingest"
+import { correlateSession, detectNPlusOne, detectSlowQuery } from "@kidkender/archmind-runtime-correlator"
 import { retrieve, prune } from "./retrieval-engine.js"
 import { naiveRag, compare } from "./naive-rag.js"
-import { toIRNodeType } from "@archmind/protocol"
+import { toIRNodeType } from "@kidkender/archmind-protocol"
 
 // ---- Runtime golden session types ------------------------------------
 

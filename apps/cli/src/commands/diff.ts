@@ -4,8 +4,8 @@ import {
   verifyTopologyBaseline,
   loadTopologyBaseline,
   DANGER_NODE_TYPES,
-} from "@archmind/retrieval"
-import type { TopologyVerifyResult, TopologyDrift } from "@archmind/retrieval"
+} from "@kidkender/archmind-retrieval"
+import type { TopologyVerifyResult, TopologyDrift } from "@kidkender/archmind-retrieval"
 import { parseProject, requireProject } from "../utils/parse-project.js"
 
 export async function runDiff(flags: Record<string, string>): Promise<void> {

@@ -1,4 +1,4 @@
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { detectDeadMiddleware } from "../pattern-detectors/dead-middleware.js"
 import { detectCircularDependency } from "../pattern-detectors/circular-dependency.js"
 

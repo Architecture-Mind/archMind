@@ -1,7 +1,7 @@
 import { describe, test, expect } from "@jest/globals"
 import { ClaudeLLMClient } from "../claude-client.js"
 import type { AnthropicMessagesCreate } from "../claude-client.js"
-import type { BuiltPrompt } from "@archmind/prompt-builder"
+import type { BuiltPrompt } from "@kidkender/archmind-prompt-builder"
 
 const PROMPT: BuiltPrompt = {
   system: "You are a semantic code reasoning engine.",

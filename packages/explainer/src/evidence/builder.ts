@@ -1,4 +1,4 @@
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { explain } from "../index.js"
 import { selectEvidenceByIntent, buildExecutionPath } from "./selector.js"
 import { extractFacts } from "./facts.js"

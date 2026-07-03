@@ -1,4 +1,4 @@
-import type { BuiltPrompt } from "@archmind/prompt-builder"
+import type { BuiltPrompt } from "@kidkender/archmind-prompt-builder"
 import type { LLMClient, LLMCallResult, LLMResponse } from "./types.js"
 
 const DEFAULT_RESPONSE: LLMResponse = {

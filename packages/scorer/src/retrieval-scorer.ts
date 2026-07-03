@@ -1,4 +1,4 @@
-import type { RetrievalResult, ExecutionNode } from "@archmind/protocol"
+import type { RetrievalResult, ExecutionNode } from "@kidkender/archmind-protocol"
 import type { GoldenTrace, GoldenNode, RetrievalRelevance } from "./golden-trace.js"
 
 // ---- Public API -------------------------------------------------------

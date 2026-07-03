@@ -1,4 +1,4 @@
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { detectSensitiveFieldExposed } from "../pattern-detectors/sensitive-field-exposed.js"
 import { detectSynchronousMail } from "../pattern-detectors/synchronous-mail.js"
 import { detectApiResourceUnprotected } from "../pattern-detectors/api-resource-unprotected.js"

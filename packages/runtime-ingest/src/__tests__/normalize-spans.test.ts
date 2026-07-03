@@ -1,4 +1,4 @@
-import type { OtelSpan } from "@archmind/protocol"
+import type { OtelSpan } from "@kidkender/archmind-protocol"
 import {
   isInfraSpan,
   isRootSpan,

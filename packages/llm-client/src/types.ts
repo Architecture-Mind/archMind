@@ -1,4 +1,4 @@
-import type { BuiltPrompt } from "@archmind/prompt-builder"
+import type { BuiltPrompt } from "@kidkender/archmind-prompt-builder"
 
 export interface LLMResponse {
   finding_type: string

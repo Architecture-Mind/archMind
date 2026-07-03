@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk"
-import type { BuiltPrompt } from "@archmind/prompt-builder"
+import type { BuiltPrompt } from "@kidkender/archmind-prompt-builder"
 import type { LLMClient, LLMCallResult, LLMResponse, JudgeClient } from "./types.js"
 
 export interface AnthropicMessagesCreate {

@@ -1,6 +1,6 @@
 import { describe, test, expect } from "@jest/globals"
 import { extractAuthorizationFacts, normalizeAbility } from "../fact-extraction/authorization.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 describe("normalizeAbility", () => {
   test("dot notation: last segment", () => {

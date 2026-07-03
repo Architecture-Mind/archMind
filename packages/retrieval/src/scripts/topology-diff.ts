@@ -31,8 +31,8 @@ import {
   augmentGraph,
   loadProjectConfig,
   resolveAliasMap,
-} from "@archmind/laravel-parser"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+} from "@kidkender/archmind-laravel-parser"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import {
   captureTopologyBaseline,
   verifyTopologyBaseline,

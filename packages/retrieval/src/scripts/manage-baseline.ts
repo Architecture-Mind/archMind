@@ -15,8 +15,8 @@
  */
 import { join, dirname } from "path"
 import { fileURLToPath } from "url"
-import { augmentGraph } from "@archmind/laravel-parser"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import { augmentGraph } from "@kidkender/archmind-laravel-parser"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import {
   captureBaseline,
   verifyBaseline,

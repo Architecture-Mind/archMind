@@ -2,7 +2,7 @@ import { describe, test, expect } from "@jest/globals"
 import { extractAuthorizationFacts } from "../fact-extraction/authorization.js"
 import { detectMissingAuthorization } from "../pattern-detectors/missing-authorization.js"
 import { FINDING_TYPES } from "../findings/types.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 // Mirrors DELETE /products/{product} in ecomerce-api:
 // auth:sanctum present, no policy, no authorization_check

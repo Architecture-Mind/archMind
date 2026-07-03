@@ -1,5 +1,5 @@
 import { describe, test, expect } from "@jest/globals"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { detectMissingTenantScope } from "../pattern-detectors/missing-tenant-scope.js"
 import { FINDING_TYPES } from "../findings/types.js"
 

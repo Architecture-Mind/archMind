@@ -1,4 +1,4 @@
-import type { IntermediateExecutionGraph, ExecutionNode } from "@archmind/protocol"
+import type { IntermediateExecutionGraph, ExecutionNode } from "@kidkender/archmind-protocol"
 import type { Finding } from "../findings/types.js"
 import type { EvidenceItem } from "./types.js"
 

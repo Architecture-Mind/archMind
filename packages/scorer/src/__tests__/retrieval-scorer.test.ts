@@ -2,7 +2,7 @@ import { join, dirname } from "path"
 import { fileURLToPath } from "url"
 import { scoreRetrieval } from "../retrieval-scorer.js"
 import { loadGoldenTrace } from "../golden-trace.js"
-import type { RetrievalResult } from "@archmind/protocol"
+import type { RetrievalResult } from "@kidkender/archmind-protocol"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname  = dirname(__filename)

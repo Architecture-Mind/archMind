@@ -25,7 +25,7 @@ export function runQuery(flags: Record<string, string>, positional: string[]): v
     process.exit(2)
   }
 
-  // Dynamic import keeps @archmind/aql out of the CLI's static dependency tree.
+  // Dynamic import keeps @kidkender/archmind-aql out of the CLI's static dependency tree.
   // The package is a devDependency resolved at build time via the workspace.
   let aqlFn: (q: string, g: unknown[]) => { routes: unknown[]; count: number; entrypoints: string[] }
   try {

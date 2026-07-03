@@ -34,9 +34,9 @@ import {
   augmentGraph,
   loadProjectConfig,
   resolveAliasMap,
-} from "@archmind/laravel-parser"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import { OpenAILLMClient } from "@archmind/llm-client"
+} from "@kidkender/archmind-laravel-parser"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
+import { OpenAILLMClient } from "@kidkender/archmind-llm-client"
 import {
   captureLLMBaseline,
   verifyLLMBaseline,

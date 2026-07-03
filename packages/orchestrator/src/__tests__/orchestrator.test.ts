@@ -1,6 +1,6 @@
 import { describe, test, expect } from "@jest/globals"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import { MockLLMClient } from "@archmind/llm-client"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
+import { MockLLMClient } from "@kidkender/archmind-llm-client"
 import { Orchestrator } from "../orchestrator.js"
 
 const AUTH_GRAPH: IntermediateExecutionGraph = {

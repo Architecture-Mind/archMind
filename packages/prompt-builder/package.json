@@ -1,5 +1,5 @@
 {
-  "name": "@archmind/prompt-builder",
+  "name": "@kidkender/archmind-prompt-builder",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -9,8 +9,8 @@
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js"
   },
   "dependencies": {
-    "@archmind/protocol": "*",
-    "@archmind/explainer": "*"
+    "@kidkender/archmind-protocol": "*",
+    "@kidkender/archmind-explainer": "*"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

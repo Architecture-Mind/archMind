@@ -1,4 +1,4 @@
-import type { Finding } from "@archmind/explainer"
+import type { Finding } from "@kidkender/archmind-explainer"
 
 export interface Contradiction {
   a: Finding

@@ -1,4 +1,4 @@
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import type { FactEntry } from "./types.js"
 
 export type RelevanceTier = "high" | "medium" | "low"

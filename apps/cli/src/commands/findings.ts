@@ -1,5 +1,5 @@
-import { explain } from "@archmind/explainer"
-import type { Finding } from "@archmind/explainer"
+import { explain } from "@kidkender/archmind-explainer"
+import type { Finding } from "@kidkender/archmind-explainer"
 import { parseProject, requireProject } from "../utils/parse-project.js"
 
 const SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"]

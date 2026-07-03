@@ -1,5 +1,5 @@
-import type { AnalysisResult } from "@archmind/protocol"
-import { buildIndexes } from "@archmind/protocol"
+import type { AnalysisResult } from "@kidkender/archmind-protocol"
+import { buildIndexes } from "@kidkender/archmind-protocol"
 import { analyzeProject } from "@kidkender/archmind-analysis"
 
 export class AnalysisService {

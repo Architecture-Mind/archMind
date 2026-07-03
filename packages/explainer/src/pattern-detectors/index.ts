@@ -1,5 +1,5 @@
 import type { SemanticFact, AuthorizationCheckFact } from "../fact-extraction/types.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import type { Finding } from "../findings/types.js"
 import { detectDuplicateAuthorization } from "./duplicate-authorization.js"
 import { detectDelegatedValidation } from "./delegated-validation.js"

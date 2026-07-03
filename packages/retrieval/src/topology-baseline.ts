@@ -1,6 +1,6 @@
 import { writeFileSync, readFileSync, mkdirSync, existsSync } from "fs"
 import { join } from "path"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { CRITICAL_NODE_TYPES } from "./retrieval-baseline.js"
 
 // Node types whose GAIN (appearance) is a regression — e.g. an unscoped write

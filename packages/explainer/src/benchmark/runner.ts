@@ -1,4 +1,4 @@
-import { loadGoldenTrace } from "@archmind/scorer"
+import { loadGoldenTrace } from "@kidkender/archmind-scorer"
 import { explain } from "../index.js"
 import { goldenTraceToGraph } from "./graph-builder.js"
 import { scoreExplainer } from "./scorer.js"

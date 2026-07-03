@@ -1,5 +1,5 @@
 import { describe, test, expect } from "@jest/globals"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { serializeExecutionPath } from "../serialize-graph.js"
 
 const AUTH_GRAPH: IntermediateExecutionGraph = {

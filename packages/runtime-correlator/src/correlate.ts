@@ -5,8 +5,8 @@ import type {
   IntermediateExecutionGraph,
   CorrelatedSpan,
   CorrelatedSession,
-} from "@archmind/protocol"
-import { partitionSpans } from "@archmind/runtime-ingest"
+} from "@kidkender/archmind-protocol"
+import { partitionSpans } from "@kidkender/archmind-runtime-ingest"
 
 // ─── Correlation strategies (ordered by precision) ───────────────────────────
 

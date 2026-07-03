@@ -5,9 +5,9 @@ import {
   augmentGraph,
   loadProjectConfig,
   resolveAliasMap,
-} from "@archmind/laravel-parser"
-import { parseNestJSProject } from "@archmind/nestjs-parser"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+} from "@kidkender/archmind-laravel-parser"
+import { parseNestJSProject } from "@kidkender/archmind-nestjs-parser"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 export type Framework = "laravel" | "nestjs" | "springboot" | "unknown"
 

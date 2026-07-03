@@ -5,7 +5,7 @@ import {
   saveTopologyBaseline,
   loadTopologyBaseline,
   DANGER_NODE_TYPES,
-} from "@archmind/retrieval"
+} from "@kidkender/archmind-retrieval"
 import { parseProject, requireProject } from "../utils/parse-project.js"
 
 interface ConstraintReportShape {

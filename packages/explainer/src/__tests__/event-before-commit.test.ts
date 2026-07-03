@@ -1,6 +1,6 @@
 import { describe, test, expect } from "@jest/globals"
 import { detectEventBeforeCommit } from "../pattern-detectors/event-before-commit.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 function makeGraph(overrides: Partial<IntermediateExecutionGraph> = {}): IntermediateExecutionGraph {
   return {

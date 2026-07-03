@@ -1,4 +1,4 @@
-import type { LLMResponse } from "@archmind/llm-client"
+import type { LLMResponse } from "@kidkender/archmind-llm-client"
 import type { GoldenAnswer } from "./golden-answer.js"
 
 export interface FieldScore {

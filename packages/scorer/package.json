@@ -1,5 +1,5 @@
 {
-  "name": "@archmind/scorer",
+  "name": "@kidkender/archmind-scorer",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -9,8 +9,8 @@
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js"
   },
   "dependencies": {
-    "@archmind/protocol": "*",
-    "@archmind/llm-client": "*",
+    "@kidkender/archmind-protocol": "*",
+    "@kidkender/archmind-llm-client": "*",
     "js-yaml": "^4.1.0"
   },
   "devDependencies": {

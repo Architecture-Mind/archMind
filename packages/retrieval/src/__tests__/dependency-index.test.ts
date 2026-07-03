@@ -1,5 +1,5 @@
 import { buildDependencyIndex, queryDependents, indexStats } from "../dependency-index.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 // ---- Fixture graphs --------------------------------------------------
 

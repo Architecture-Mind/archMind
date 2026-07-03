@@ -2,7 +2,7 @@ import { describe, test, expect } from "@jest/globals"
 import { extractValidationGateFacts } from "../fact-extraction/validation.js"
 import { detectDelegatedValidation } from "../pattern-detectors/delegated-validation.js"
 import { FINDING_TYPES } from "../findings/types.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 const VALIDATION_001_GRAPH: IntermediateExecutionGraph = {
   entrypoint: "PUT /tasks/{id}",

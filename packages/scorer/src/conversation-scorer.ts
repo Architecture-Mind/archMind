@@ -1,4 +1,4 @@
-import type { LLMResponse } from "@archmind/llm-client"
+import type { LLMResponse } from "@kidkender/archmind-llm-client"
 import type { GoldenConvTurnExpected } from "./golden-conversation.js"
 
 export interface ConvTurnScore {

@@ -5,8 +5,8 @@ import type {
   RetrievalRequest,
   RetrievalResult,
   RetrievalFocus,
-} from "@archmind/protocol"
-import { PROTOCOL_VERSION } from "@archmind/protocol"
+} from "@kidkender/archmind-protocol"
+import { PROTOCOL_VERSION } from "@kidkender/archmind-protocol"
 import { estimateSerializedTokens } from "./serializer.js"
 
 export type RetrievalRelevance = "HIGH" | "MEDIUM" | "LOW"

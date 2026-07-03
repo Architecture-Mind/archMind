@@ -1,4 +1,4 @@
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { detectFatController } from "../pattern-detectors/fat-controller.js"
 import { detectExposedReadEndpoint } from "../pattern-detectors/exposed-read-endpoint.js"
 import { detectOverAuthorizedRoute } from "../pattern-detectors/over-authorized-route.js"

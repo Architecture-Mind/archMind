@@ -1,5 +1,5 @@
 {
-  "name": "@archmind/retrieval",
+  "name": "@kidkender/archmind-retrieval",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -9,13 +9,13 @@
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js"
   },
   "dependencies": {
-    "@archmind/protocol": "*",
-    "@archmind/scorer": "*",
-    "@archmind/laravel-parser": "*",
-    "@archmind/nestjs-parser": "*",
-    "@archmind/runtime-ingest": "*",
-    "@archmind/runtime-correlator": "*",
-    "@archmind/explainer": "*",
+    "@kidkender/archmind-protocol": "*",
+    "@kidkender/archmind-scorer": "*",
+    "@kidkender/archmind-laravel-parser": "*",
+    "@kidkender/archmind-nestjs-parser": "*",
+    "@kidkender/archmind-runtime-ingest": "*",
+    "@kidkender/archmind-runtime-correlator": "*",
+    "@kidkender/archmind-explainer": "*",
     "js-yaml": "^4.1.0",
     "openai": "^4.0.0"
   },

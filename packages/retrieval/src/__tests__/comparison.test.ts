@@ -1,8 +1,8 @@
 import { join, dirname } from "path"
 import { fileURLToPath } from "url"
 import { retrieve, prune, serialize, naiveRag, compare } from "../index.js"
-import { loadGoldenTrace, scoreRetrieval } from "@archmind/scorer"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import { loadGoldenTrace, scoreRetrieval } from "@kidkender/archmind-scorer"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 const __filename  = fileURLToPath(import.meta.url)
 const __dirname   = dirname(__filename)

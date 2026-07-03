@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from "fs"
 import { join } from "path"
-import type { GoldenTrace } from "@archmind/scorer"
+import type { GoldenTrace } from "@kidkender/archmind-scorer"
 
 // ---- Public API -------------------------------------------------------
 

@@ -1,4 +1,4 @@
-import { buildDependencyIndex, queryDependents } from "@archmind/retrieval"
+import { buildDependencyIndex, queryDependents } from "@kidkender/archmind-retrieval"
 import { parseProject, requireProject } from "../utils/parse-project.js"
 
 export function runDeps(flags: Record<string, string>, positional: string[]): void {

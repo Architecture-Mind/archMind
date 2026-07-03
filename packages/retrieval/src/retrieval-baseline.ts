@@ -1,7 +1,7 @@
 import { join } from "path"
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "fs"
-import { loadGoldenTrace, scoreRetrieval } from "@archmind/scorer"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import { loadGoldenTrace, scoreRetrieval } from "@kidkender/archmind-scorer"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { retrieve } from "./retrieval-engine.js"
 import { naiveRag } from "./naive-rag.js"
 

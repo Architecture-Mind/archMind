@@ -1,5 +1,5 @@
-import { explain as detectFindings, traceByPattern } from "@archmind/explainer"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import { explain as detectFindings, traceByPattern } from "@kidkender/archmind-explainer"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { parseProject, requireProject } from "../utils/parse-project.js"
 
 interface RequestStep {

@@ -1,4 +1,4 @@
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import type { SemanticFact } from "./types.js"
 import { extractAuthorizationFacts } from "./authorization.js"
 import { extractValidationGateFacts } from "./validation.js"

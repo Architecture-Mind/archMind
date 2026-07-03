@@ -3,7 +3,7 @@ import {
   captureTopologyBaseline,
   saveTopologyBaseline,
   saveSnapshot,
-} from "@archmind/retrieval"
+} from "@kidkender/archmind-retrieval"
 import { parseProject, requireProject } from "../utils/parse-project.js"
 
 export function runSnapshot(flags: Record<string, string>): void {

@@ -1,4 +1,4 @@
-import type { OtelSpan, TraceSession } from "@archmind/protocol"
+import type { OtelSpan, TraceSession } from "@kidkender/archmind-protocol"
 import { readFileSync } from "fs"
 import { normalizeAttributes, extractEntrypoint, computeDurationMs } from "./normalize-spans.js"
 

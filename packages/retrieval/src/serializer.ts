@@ -1,4 +1,4 @@
-import type { RetrievalResult, ExecutionNode, ExecutionEdge } from "@archmind/protocol"
+import type { RetrievalResult, ExecutionNode, ExecutionEdge } from "@kidkender/archmind-protocol"
 
 // ---- Public API -------------------------------------------------------
 

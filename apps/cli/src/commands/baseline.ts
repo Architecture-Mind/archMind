@@ -4,7 +4,7 @@ import {
   verifyTopologyBaseline,
   saveTopologyBaseline,
   loadTopologyBaseline,
-} from "@archmind/retrieval"
+} from "@kidkender/archmind-retrieval"
 import { parseProject, requireProject } from "../utils/parse-project.js"
 
 export function runBaseline(subcommand: string | undefined, flags: Record<string, string>): void {

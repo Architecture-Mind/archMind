@@ -1,5 +1,5 @@
-import type { LLMClient, LLMCallResult } from "@archmind/llm-client"
-import type { NaiveRagResult } from "@archmind/retrieval"
+import type { LLMClient, LLMCallResult } from "@kidkender/archmind-llm-client"
+import type { NaiveRagResult } from "@kidkender/archmind-retrieval"
 
 const SYSTEM = `You are a security code reviewer for Laravel PHP applications. \
 Analyze the provided PHP source code and answer the security question. \

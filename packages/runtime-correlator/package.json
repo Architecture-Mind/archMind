@@ -1,5 +1,5 @@
 {
-  "name": "@archmind/runtime-correlator",
+  "name": "@kidkender/archmind-runtime-correlator",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -9,8 +9,8 @@
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js"
   },
   "dependencies": {
-    "@archmind/protocol": "*",
-    "@archmind/runtime-ingest": "*"
+    "@kidkender/archmind-protocol": "*",
+    "@kidkender/archmind-runtime-ingest": "*"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

@@ -1,5 +1,5 @@
 import { InlayHint, InlayHintKind, MarkupContent } from "vscode-languageserver"
-import type { RouteInfo, FindingInfo } from "@archmind/protocol"
+import type { RouteInfo, FindingInfo } from "@kidkender/archmind-protocol"
 
 export function buildInlayHints(routes: RouteInfo[]): InlayHint[] {
   return routes.map(route => ({

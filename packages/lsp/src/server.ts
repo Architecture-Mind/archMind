@@ -20,7 +20,7 @@ import { existsSync } from "fs"
 import { WorkspaceManager } from "./workspace/manager.js"
 import { buildInlayHints } from "./providers/inlay-hints.js"
 import { uriToFile } from "./converters/ir-to-lsp.js"
-import type { RouteInfo } from "@archmind/protocol"
+import type { RouteInfo } from "@kidkender/archmind-protocol"
 
 const connection = createConnection(ProposedFeatures.all)
 const documents  = new TextDocuments(TextDocument)

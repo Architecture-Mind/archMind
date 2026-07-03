@@ -1,6 +1,6 @@
 import { describe, test, expect } from "@jest/globals"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import type { Finding } from "@archmind/explainer"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
+import type { Finding } from "@kidkender/archmind-explainer"
 import { buildPrompt } from "../build-prompt.js"
 
 const GRAPH: IntermediateExecutionGraph = {

@@ -2,7 +2,7 @@ import { describe, test, expect } from "@jest/globals"
 import { extractRuntimeInjectionFacts } from "../fact-extraction/runtime.js"
 import { detectHiddenRuntimeDependency } from "../pattern-detectors/hidden-runtime-dependency.js"
 import { FINDING_TYPES } from "../findings/types.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 const RUNTIME_001_GRAPH: IntermediateExecutionGraph = {
   entrypoint: "ANY /tasks/*",

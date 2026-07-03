@@ -1,5 +1,5 @@
 import { retrieve, prune, serialize } from "../index.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 const AUGMENTED_GRAPH: IntermediateExecutionGraph = {
   entrypoint: "PUT /tasks/{task}",

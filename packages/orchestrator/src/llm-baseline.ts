@@ -1,7 +1,7 @@
 import { writeFileSync, readFileSync, mkdirSync, existsSync } from "fs"
 import { join } from "path"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import type { LLMClient } from "@archmind/llm-client"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
+import type { LLMClient } from "@kidkender/archmind-llm-client"
 import { runMultiRunBenchmark } from "./multi-run-benchmark.js"
 
 // ---------------------------------------------------------------------------

@@ -3,7 +3,7 @@ import { extractAuthorizationFacts } from "../fact-extraction/authorization.js"
 import { detectDoublePermissionCheck } from "../pattern-detectors/double-permission-check.js"
 import { normalizeAbility } from "../fact-extraction/authorization.js"
 import { FINDING_TYPES } from "../findings/types.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 // Graph matching the real tenant-workspace-api shape:
 // middleware authorization_check (Permission::TASK_UPDATE) → policy → PermissionService

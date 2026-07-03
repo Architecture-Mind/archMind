@@ -1,5 +1,5 @@
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
-import type { LLMClient } from "@archmind/llm-client"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
+import type { LLMClient } from "@kidkender/archmind-llm-client"
 import { runAnswerBenchmark } from "./answer-benchmark.js"
 import type { AnswerBenchmarkTrace } from "./answer-benchmark.js"
 

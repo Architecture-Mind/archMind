@@ -1,4 +1,4 @@
-import type { Finding, Severity } from "@archmind/explainer"
+import type { Finding, Severity } from "@kidkender/archmind-explainer"
 
 const SEVERITY_ORDER: Record<Severity, number> = {
   CRITICAL: 0,

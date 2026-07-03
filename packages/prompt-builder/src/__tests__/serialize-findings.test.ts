@@ -1,5 +1,5 @@
 import { describe, test, expect } from "@jest/globals"
-import type { Finding } from "@archmind/explainer"
+import type { Finding } from "@kidkender/archmind-explainer"
 import { serializeFindings } from "../serialize-findings.js"
 
 const DUP_AUTH_FINDING: Finding = {

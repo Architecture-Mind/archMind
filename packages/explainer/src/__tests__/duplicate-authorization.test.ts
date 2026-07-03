@@ -2,7 +2,7 @@ import { describe, test, expect, beforeEach } from "@jest/globals"
 import { extractAuthorizationFacts } from "../fact-extraction/authorization.js"
 import { detectDuplicateAuthorization } from "../pattern-detectors/duplicate-authorization.js"
 import { FINDING_TYPES } from "../findings/types.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 const AUTH_001_GRAPH: IntermediateExecutionGraph = {
   entrypoint: "PUT /tasks/{id}",

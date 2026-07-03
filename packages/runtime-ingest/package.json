@@ -1,5 +1,5 @@
 {
-  "name": "@archmind/runtime-ingest",
+  "name": "@kidkender/archmind-runtime-ingest",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -9,7 +9,7 @@
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js"
   },
   "dependencies": {
-    "@archmind/protocol": "*"
+    "@kidkender/archmind-protocol": "*"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

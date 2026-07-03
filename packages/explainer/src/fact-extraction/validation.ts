@@ -1,4 +1,4 @@
-import type { IntermediateExecutionGraph, ExecutionNode } from "@archmind/protocol"
+import type { IntermediateExecutionGraph, ExecutionNode } from "@kidkender/archmind-protocol"
 import type { ValidationGateFact } from "./types.js"
 
 function isValidationGateNode(node: ExecutionNode): boolean {

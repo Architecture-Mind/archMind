@@ -4,7 +4,7 @@ import type {
   TraceSession,
   OtelSpan,
   CorrelatedSession,
-} from "@archmind/protocol"
+} from "@kidkender/archmind-protocol"
 
 export interface FusedRetrievalResult extends RetrievalResult {
   runtimeFindings: RuntimeFinding[]

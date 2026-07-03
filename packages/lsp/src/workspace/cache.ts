@@ -1,4 +1,4 @@
-import type { AnalysisResult } from "@archmind/protocol"
+import type { AnalysisResult } from "@kidkender/archmind-protocol"
 
 export interface WorkspaceCache {
   analysis:         AnalysisResult

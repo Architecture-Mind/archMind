@@ -10,7 +10,7 @@ import { join, dirname } from "path"
 import { fileURLToPath } from "url"
 import { writeFileSync, mkdirSync } from "fs"
 import { runBenchmark } from "../benchmark.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname  = dirname(__filename)

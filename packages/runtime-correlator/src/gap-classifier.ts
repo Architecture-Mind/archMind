@@ -1,4 +1,4 @@
-import type { OtelSpan, CorrelatedSession } from "@archmind/protocol"
+import type { OtelSpan, CorrelatedSession } from "@kidkender/archmind-protocol"
 
 export type SpanCategory =
   | "queue_job"

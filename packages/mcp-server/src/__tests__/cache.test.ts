@@ -14,7 +14,7 @@ import {
   _getNestProject,
   _getNestTrackedFiles,
 } from "../cache.js"
-import type { IntermediateExecutionGraph } from "@archmind/protocol"
+import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 const FAKE_GRAPHS: IntermediateExecutionGraph[] = []
 

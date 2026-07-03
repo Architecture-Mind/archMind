@@ -1,5 +1,5 @@
-import type { IntermediateExecutionGraph, ExecutionNode } from "@archmind/protocol"
-import { toIRNodeType } from "@archmind/protocol"
+import type { IntermediateExecutionGraph, ExecutionNode } from "@kidkender/archmind-protocol"
+import { toIRNodeType } from "@kidkender/archmind-protocol"
 import type { GoldenTrace, GoldenNode } from "./golden-trace.js"
 
 // ---- Public API -------------------------------------------------------

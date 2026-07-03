@@ -1,5 +1,5 @@
 {
-  "name": "@archmind/orchestrator",
+  "name": "@kidkender/archmind-orchestrator",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -9,15 +9,15 @@
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js"
   },
   "dependencies": {
-    "@archmind/protocol": "*",
-    "@archmind/explainer": "*",
-    "@archmind/retrieval": "*",
-    "@archmind/prompt-builder": "*",
-    "@archmind/llm-client": "*",
-    "@archmind/scorer": "*"
+    "@kidkender/archmind-protocol": "*",
+    "@kidkender/archmind-explainer": "*",
+    "@kidkender/archmind-retrieval": "*",
+    "@kidkender/archmind-prompt-builder": "*",
+    "@kidkender/archmind-llm-client": "*",
+    "@kidkender/archmind-scorer": "*"
   },
   "devDependencies": {
-    "@archmind/laravel-parser": "*",
+    "@kidkender/archmind-laravel-parser": "*",
     "@types/jest": "^29.5.0",
     "@types/node": "^20.0.0",
     "jest": "^29.0.0",

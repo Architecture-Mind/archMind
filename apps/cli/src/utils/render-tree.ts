@@ -1,4 +1,4 @@
-import type { IntermediateExecutionGraph, ExecutionNode } from "@archmind/protocol"
+import type { IntermediateExecutionGraph, ExecutionNode } from "@kidkender/archmind-protocol"
 
 const NODE_ICONS: Record<string, string> = {
   authentication_gate:  "🔑",
