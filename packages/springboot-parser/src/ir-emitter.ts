@@ -131,6 +131,11 @@ export function emitGraph(m: SpringControllerMethod): IntermediateExecutionGraph
     entrypoint:  `${m.httpMethod} ${m.path}`,
     method:      m.httpMethod,
     path:        m.path,
+    source: {
+      type:     "http",
+      id:       `${m.httpMethod} ${m.path}`,
+      metadata: { method: m.httpMethod, path: m.path },
+    },
     framework:   "springboot",
     ir_ver:      IR_VERSION,
     nodes,

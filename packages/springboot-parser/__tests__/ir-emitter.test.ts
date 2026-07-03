@@ -25,6 +25,17 @@ function baseMethod(overrides: Partial<SpringControllerMethod> = {}): SpringCont
   }
 }
 
+describe("emitGraph — entrypoint descriptor", () => {
+  test("populates graph.source with a framework-agnostic HTTP entrypoint descriptor", () => {
+    const graph = emitGraph(baseMethod({ httpMethod: "POST", path: "/orders" }))
+    expect(graph.source).toEqual({
+      type:     "http",
+      id:       "POST /orders",
+      metadata: { method: "POST", path: "/orders" },
+    })
+  })
+})
+
 describe("emitGraph — auth annotation classification", () => {
   test("isAuthOnly annotation emits only an auth_gate node", () => {
     const graph = emitGraph(baseMethod({
