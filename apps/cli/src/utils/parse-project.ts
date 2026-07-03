@@ -1,5 +1,5 @@
 import { join } from "path"
-import { existsSync, readFileSync } from "fs"
+import { existsSync, readFileSync, readdirSync, statSync } from "fs"
 import {
   parseRouteFile,
   augmentGraph,
@@ -11,18 +11,50 @@ import type { IntermediateExecutionGraph } from "@archmind/protocol"
 
 export type Framework = "laravel" | "nestjs" | "springboot" | "unknown"
 
-function tryParseSpringBoot(root: string): IntermediateExecutionGraph[] | null {
+function tryParseSpringBoot(root: string): { graphs: IntermediateExecutionGraph[]; fileCount: number } | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { isSpringBootProject, parseSpringBootProject } = require("@kidkender/archmind-springboot-parser") as {
-      isSpringBootProject: (root: string) => boolean
-      parseSpringBootProject: (root: string) => IntermediateExecutionGraph[]
-    }
+    const { isSpringBootProject, parseSpringBootProject, findJavaFiles, isControllerFile } =
+      require("@kidkender/archmind-springboot-parser") as {
+        isSpringBootProject: (root: string) => boolean
+        parseSpringBootProject: (root: string) => IntermediateExecutionGraph[]
+        findJavaFiles: (root: string) => string[]
+        isControllerFile: (filePath: string) => boolean
+      }
     if (!isSpringBootProject(root)) return null
-    return parseSpringBootProject(root)
+    const graphs = parseSpringBootProject(root)
+    const fileCount = findJavaFiles(root).filter(isControllerFile).length
+    return { graphs, fileCount }
   } catch {
     return null
   }
+}
+
+/** Count files matching common NestJS controller-file naming, walked recursively. */
+function countNestControllerFiles(root: string): number {
+  let count = 0
+  const walk = (dir: string): void => {
+    let entries: string[]
+    try {
+      entries = readdirSync(dir)
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (entry === "node_modules" || entry === "dist" || entry === ".git") continue
+      const p = join(dir, entry)
+      let st: ReturnType<typeof statSync>
+      try {
+        st = statSync(p)
+      } catch {
+        continue
+      }
+      if (st.isDirectory()) walk(p)
+      else if (entry.endsWith(".controller.ts")) count++
+    }
+  }
+  walk(root)
+  return count
 }
 
 export interface ParsedProject {
@@ -72,12 +104,13 @@ export function parseProject(projectRoot: string): ParsedProject {
 
   if (framework === "nestjs") {
     const graphs = parseNestJSProject(projectRoot)
-    return { graphs, routeCount: graphs.length, fileCount: 0, projectRoot, framework }
+    return { graphs, routeCount: graphs.length, fileCount: countNestControllerFiles(projectRoot), projectRoot, framework }
   }
 
   if (framework === "springboot") {
-    const graphs = tryParseSpringBoot(projectRoot) ?? []
-    return { graphs, routeCount: graphs.length, fileCount: 0, projectRoot, framework }
+    const result = tryParseSpringBoot(projectRoot)
+    const graphs = result?.graphs ?? []
+    return { graphs, routeCount: graphs.length, fileCount: result?.fileCount ?? 0, projectRoot, framework }
   }
 
   // Default: Laravel
