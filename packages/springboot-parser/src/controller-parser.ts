@@ -2,7 +2,10 @@ import { readFileSync } from "fs"
 import Parser from "tree-sitter"
 // @ts-ignore
 import Java from "tree-sitter-java"
-import type { SpringControllerMethod, AuthAnnotation, ServiceCall, DataAccessCall, EventPublication, HttpMethod } from "./types.js"
+import type {
+  SpringControllerMethod, AuthAnnotation, ServiceCall, DataAccessCall, EventPublication, HttpMethod,
+  MessagingEntrypointMetadata, ScheduledEntrypointMetadata,
+} from "./types.js"
 
 const _parser = new Parser()
 _parser.setLanguage(Java)
@@ -29,6 +32,13 @@ const WRITE_REPO_METHODS = new Set([
 const MESSAGING_FIELD_PATTERNS = ["rabbitTemplate", "kafkaTemplate", "jmsTemplate", "sqsTemplate"]
 const MAIL_FIELD_PATTERNS       = ["mailSender", "javaMailSender", "emailService"]
 const EVENT_PUBLISHER_PATTERNS  = ["eventPublisher", "applicationEventPublisher", "publisher"]
+
+// Method-level listener annotations → which argument holds the destination name.
+const MESSAGING_LISTENER_ANNS: Record<string, string> = {
+  KafkaListener:  "topics",
+  RabbitListener: "queues",
+  JmsListener:    "destination",
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -62,23 +72,29 @@ export function parseControllerFile(
   const root = tree.rootNode
   const out:  SpringControllerMethod[] = []
 
-  // Find all class declarations in the file
+  // Find all class declarations in the file. We no longer gate the whole
+  // class on @Controller/@RestController: message listeners and @Scheduled
+  // jobs commonly live in @Service/@Component classes. HTTP-specific path
+  // resolution still only runs for controller classes.
   for (const classNode of root.descendantsOfType("class_declaration")) {
     const classMods = getModifiers(classNode)
     if (!classMods) continue
-    if (!hasAnnotation(classMods, CONTROLLER_ANNS)) continue
 
+    const isControllerClass = hasAnnotation(classMods, CONTROLLER_ANNS)
     const className = classNode.childForFieldName("name")?.text ?? "UnknownController"
 
     // Resolve class-level path: own @RequestMapping OR inherited from base class
-    let classPath = getRequestMappingPath(classMods)
-    if (!classPath && baseClassIndex) {
-      // superclass field text is "extends ClassName" — strip the keyword
-      const superclassText = classNode.childForFieldName("superclass")?.text ?? ""
-      const baseClass = superclassText.replace(/^extends\s+/, "").trim() ||
-                        (extractExtendsFromSource(source, className) ?? "")
-      if (baseClass && baseClassIndex.has(baseClass)) {
-        classPath = baseClassIndex.get(baseClass)!
+    let classPath = ""
+    if (isControllerClass) {
+      classPath = getRequestMappingPath(classMods)
+      if (!classPath && baseClassIndex) {
+        // superclass field text is "extends ClassName" — strip the keyword
+        const superclassText = classNode.childForFieldName("superclass")?.text ?? ""
+        const baseClass = superclassText.replace(/^extends\s+/, "").trim() ||
+                          (extractExtendsFromSource(source, className) ?? "")
+        if (baseClass && baseClassIndex.has(baseClass)) {
+          classPath = baseClassIndex.get(baseClass)!
+        }
       }
     }
 
@@ -96,11 +112,12 @@ export function parseControllerFile(
       const mods = getModifiers(methodNode)
       if (!mods) continue
 
-      const httpMethod = getHttpMethod(mods)
-      if (!httpMethod) continue   // skip non-HTTP methods
+      const httpMethod = isControllerClass ? getHttpMethod(mods) : null
+      const messaging   = getMessagingMetadata(mods)
+      const schedule    = getScheduledMetadata(mods)
 
-      const methodPath  = getRequestMappingPath(mods)
-      const fullPath    = normalizePath(classPath, methodPath)
+      if (!httpMethod && !messaging && !schedule) continue   // not an entrypoint method
+
       const methodName  = methodNode.childForFieldName("name")?.text ?? "unknown"
       const methodTxn   = classTxn || hasAnnotation(mods, new Set(["Transactional"]))
       const readOnly    = isReadOnlyTxn(mods)
@@ -125,12 +142,10 @@ export function parseControllerFile(
         )
       }
 
-      out.push({
+      const common = {
         filePath,
         className,
         methodName,
-        httpMethod,
-        path: fullPath,
         authAnnotations,
         hasValidation,
         validatedParamTypes,
@@ -143,7 +158,17 @@ export function parseControllerFile(
         mailCalls,
         messagingCalls,
         methodLine: methodNode.startPosition.row + 1,
-      })
+      }
+
+      if (httpMethod) {
+        const methodPath = getRequestMappingPath(mods)
+        const fullPath   = normalizePath(classPath, methodPath)
+        out.push({ ...common, kind: "http", httpMethod, path: fullPath })
+      } else if (messaging) {
+        out.push({ ...common, kind: "queue", messaging })
+      } else {
+        out.push({ ...common, kind: "cron", schedule: schedule! })
+      }
     }
   }
 
@@ -259,6 +284,43 @@ function getRequestMappingPath(modifiers: Parser.SyntaxNode): string {
     }
   }
   return ""
+}
+
+// ---------------------------------------------------------------------------
+// Message listener metadata (@KafkaListener / @RabbitListener / @JmsListener)
+// ---------------------------------------------------------------------------
+
+function getMessagingMetadata(modifiers: Parser.SyntaxNode): MessagingEntrypointMetadata | null {
+  for (const child of modifiers.children) {
+    if (child.type !== "annotation" && child.type !== "marker_annotation") continue
+    const name = getAnnotationName(child)
+    if (!name || !MESSAGING_LISTENER_ANNS[name]) continue
+
+    const argName     = MESSAGING_LISTENER_ANNS[name]
+    const destination  = getAnnotationStringArg(child, argName) ?? getAnnotationStringArg(child) ?? "unknown"
+    const groupId       = getAnnotationStringArg(child, "groupId") ?? undefined
+
+    return { annotation: name, destination, ...(groupId ? { groupId } : {}) }
+  }
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// @Scheduled metadata
+// ---------------------------------------------------------------------------
+
+function getScheduledMetadata(modifiers: Parser.SyntaxNode): ScheduledEntrypointMetadata | null {
+  for (const child of modifiers.children) {
+    if (child.type !== "annotation" && child.type !== "marker_annotation") continue
+    if (getAnnotationName(child) !== "Scheduled") continue
+
+    const cron       = getAnnotationStringArg(child, "cron") ?? undefined
+    const fixedRate  = getAnnotationStringArg(child, "fixedRate") ?? undefined
+    const fixedDelay = getAnnotationStringArg(child, "fixedDelay") ?? undefined
+
+    return { ...(cron ? { cron } : {}), ...(fixedRate ? { fixedRate } : {}), ...(fixedDelay ? { fixedDelay } : {}) }
+  }
+  return null
 }
 
 function normalizePath(classPath: string, methodPath: string): string {

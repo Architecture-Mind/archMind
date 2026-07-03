@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "fs"
 import { join } from "path"
-import { entrypointDetectors } from "./entrypoint-detector.js"
+import { entrypointDetectors, httpEntrypointDetector } from "./entrypoint-detector.js"
 
 /**
  * Walk src/main/java under the root (handles multi-module Maven projects where
@@ -43,14 +43,29 @@ function walkJava(dir: string): string[] {
 }
 
 /**
- * Quick pre-filter: does this file look like it contains a known entrypoint
- * kind (HTTP controller today; Kafka/Scheduled register more detectors in
- * entrypoint-detector.ts without changing this function).
+ * Quick pre-filter: does this file look like a Spring REST controller
+ * (HTTP entrypoints only)? Kept narrow because `apps/cli` reports this
+ * count specifically as "controller files" — use isEntrypointFile() for
+ * scanning all entrypoint kinds (HTTP, messaging, scheduled).
  */
 export function isControllerFile(filePath: string): boolean {
+  return matchesDetector(filePath, httpEntrypointDetector.matchesSource)
+}
+
+/**
+ * Quick pre-filter: does this file contain ANY known entrypoint kind —
+ * HTTP controller, message listener (@KafkaListener/@RabbitListener/
+ * @JmsListener), or @Scheduled job? New kinds register a detector in
+ * entrypoint-detector.ts instead of adding another isXFile() function here.
+ */
+export function isEntrypointFile(filePath: string): boolean {
+  return matchesDetector(filePath, (src) => entrypointDetectors.some((d) => d.matchesSource(src)))
+}
+
+function matchesDetector(filePath: string, predicate: (source: string) => boolean): boolean {
   try {
     const src = readFileSync(filePath, "utf-8")
-    return entrypointDetectors.some((detector) => detector.matchesSource(src))
+    return predicate(src)
   } catch {
     return false
   }

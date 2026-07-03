@@ -23,4 +23,26 @@ export const httpEntrypointDetector: EntrypointDetector = {
   },
 }
 
-export const entrypointDetectors: EntrypointDetector[] = [httpEntrypointDetector]
+export const messagingEntrypointDetector: EntrypointDetector = {
+  kind: "queue",
+  matchesSource(source: string): boolean {
+    return (
+      source.includes("@KafkaListener") ||
+      source.includes("@RabbitListener") ||
+      source.includes("@JmsListener")
+    )
+  },
+}
+
+export const scheduledEntrypointDetector: EntrypointDetector = {
+  kind: "cron",
+  matchesSource(source: string): boolean {
+    return source.includes("@Scheduled")
+  },
+}
+
+export const entrypointDetectors: EntrypointDetector[] = [
+  httpEntrypointDetector,
+  messagingEntrypointDetector,
+  scheduledEntrypointDetector,
+]

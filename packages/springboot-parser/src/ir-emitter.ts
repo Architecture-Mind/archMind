@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto"
-import type { IntermediateExecutionGraph, ExecutionNode, ExecutionEdge } from "@kidkender/archmind-protocol"
+import type { IntermediateExecutionGraph, ExecutionNode, ExecutionEdge, EntrypointDescriptor } from "@kidkender/archmind-protocol"
 import { IR_NODE_TYPES, IR_EDGE_RELATIONS, IR_VERSION } from "@kidkender/archmind-protocol"
 import type { SpringControllerMethod, AuthAnnotation } from "./types.js"
 
@@ -127,20 +127,80 @@ export function emitGraph(m: SpringControllerMethod): IntermediateExecutionGraph
     edge(callFrom, n.id, "ir:dispatches")
   }
 
+  const { entrypoint, method, path, source } = buildEntrypoint(m)
+
   return {
-    entrypoint:  `${m.httpMethod} ${m.path}`,
-    method:      m.httpMethod,
-    path:        m.path,
-    source: {
-      type:     "http",
-      id:       `${m.httpMethod} ${m.path}`,
-      metadata: { method: m.httpMethod, path: m.path },
-    },
+    entrypoint,
+    method,
+    path,
+    source,
     framework:   "springboot",
     ir_ver:      IR_VERSION,
     nodes,
     edges,
     annotations: [],
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Entrypoint descriptor — kind-specific fields (http / queue / cron)
+// ---------------------------------------------------------------------------
+
+function buildEntrypoint(m: SpringControllerMethod): {
+  entrypoint: string
+  method:     string
+  path:       string
+  source:     EntrypointDescriptor
+} {
+  if (m.kind === "queue" && m.messaging) {
+    const id = `${m.messaging.annotation}:${m.messaging.destination}`
+    return {
+      entrypoint: id,
+      method:     "MESSAGE",
+      path:       m.messaging.destination,
+      source: {
+        type:     "queue",
+        id,
+        metadata: {
+          annotation:  m.messaging.annotation,
+          destination: m.messaging.destination,
+          ...(m.messaging.groupId ? { groupId: m.messaging.groupId } : {}),
+        },
+      },
+    }
+  }
+
+  if (m.kind === "cron" && m.schedule) {
+    const trigger = m.schedule.cron ?? m.schedule.fixedRate ?? m.schedule.fixedDelay ?? "unknown"
+    const id = `${m.className}::${m.methodName}`
+    return {
+      entrypoint: id,
+      method:     "SCHEDULE",
+      path:       trigger,
+      source: {
+        type:     "cron",
+        id,
+        metadata: {
+          ...(m.schedule.cron ? { cron: m.schedule.cron } : {}),
+          ...(m.schedule.fixedRate ? { fixedRate: m.schedule.fixedRate } : {}),
+          ...(m.schedule.fixedDelay ? { fixedDelay: m.schedule.fixedDelay } : {}),
+        },
+      },
+    }
+  }
+
+  const httpMethod = m.httpMethod ?? "GET"
+  const path       = m.path ?? "/"
+  const id         = `${httpMethod} ${path}`
+  return {
+    entrypoint: id,
+    method:     httpMethod,
+    path,
+    source: {
+      type:     "http",
+      id,
+      metadata: { method: httpMethod, path },
+    },
   }
 }
 

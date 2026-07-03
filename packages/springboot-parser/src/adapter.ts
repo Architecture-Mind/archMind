@@ -2,7 +2,7 @@ import { randomUUID } from "crypto"
 import type { IntermediateExecutionGraph, ExecutionNode, ExecutionEdge } from "@kidkender/archmind-protocol"
 import type { SemanticAdapter } from "@kidkender/archmind-protocol"
 import { IR_NODE_TYPES, IR_EDGE_RELATIONS, IR_VERSION } from "@kidkender/archmind-protocol"
-import { findJavaFiles, isControllerFile } from "./scanner.js"
+import { findJavaFiles, isEntrypointFile } from "./scanner.js"
 import { parseControllerFile } from "./controller-parser.js"
 import { emitGraph } from "./ir-emitter.js"
 import { buildBaseClassIndex } from "./inheritance-resolver.js"
@@ -12,7 +12,7 @@ import { buildServiceTransactionIndex, type ServiceTransactionIndex } from "./se
 export class SpringBootAdapter implements SemanticAdapter {
   parseProject(root: string): IntermediateExecutionGraph[] {
     const allFiles       = findJavaFiles(root)
-    const controllerFiles = allFiles.filter(isControllerFile)
+    const controllerFiles = allFiles.filter(isEntrypointFile)
 
     // Build cross-file indices once
     const baseClassIndex = buildBaseClassIndex(allFiles)

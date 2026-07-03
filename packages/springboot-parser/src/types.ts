@@ -29,12 +29,32 @@ export interface EventPublication {
   insideTxn: boolean    // true when inside an @Transactional method
 }
 
+export type EntrypointKind = "http" | "queue" | "cron"
+
+// Metadata for a method entered via a message listener
+// (@KafkaListener / @RabbitListener / @JmsListener).
+export interface MessagingEntrypointMetadata {
+  annotation:  string          // "KafkaListener" | "RabbitListener" | "JmsListener"
+  destination: string          // topic / queue / destination name
+  groupId?:    string          // Kafka consumer group, when present
+}
+
+// Metadata for a method entered via @Scheduled.
+export interface ScheduledEntrypointMetadata {
+  cron?:        string
+  fixedRate?:   string
+  fixedDelay?:  string
+}
+
 export interface SpringControllerMethod {
   filePath:            string
   className:           string
   methodName:          string
-  httpMethod:          HttpMethod
-  path:                string     // full path (class prefix + method path)
+  kind:                EntrypointKind
+  httpMethod?:         HttpMethod   // set when kind === "http"
+  path?:               string       // full path (class prefix + method path); set when kind === "http"
+  messaging?:          MessagingEntrypointMetadata  // set when kind === "queue"
+  schedule?:           ScheduledEntrypointMetadata  // set when kind === "cron"
   authAnnotations:     AuthAnnotation[]
   hasValidation:       boolean    // @Valid on any parameter
   validatedParamTypes: string[]   // e.g. ["CreateOrderRequest"]
@@ -45,6 +65,6 @@ export interface SpringControllerMethod {
   eventPublications:   EventPublication[]
   asyncCalls:          string[]   // @Async method targets
   mailCalls:           string[]   // JavaMailSender.send targets
-  messagingCalls:      string[]   // RabbitTemplate/KafkaTemplate targets
+  messagingCalls:      string[]   // RabbitTemplate/KafkaTemplate targets (outgoing calls, not the listener itself)
   methodLine:          number     // 1-indexed, for editor integration
 }

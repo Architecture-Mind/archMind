@@ -7,6 +7,7 @@ function baseMethod(overrides: Partial<SpringControllerMethod> = {}): SpringCont
     filePath:            "OrderController.java",
     className:           "OrderController",
     methodName:          "create",
+    kind:                "http",
     httpMethod:          "POST",
     path:                "/orders",
     authAnnotations:     [],
