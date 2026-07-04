@@ -9,5 +9,8 @@
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "trace": "node apps/cli/dist/index.js trace"
+  },
+  "overrides": {
+    "js-yaml": "^4.2.0"
   }
 }
