@@ -4,7 +4,7 @@
 //
 // Spec: research/semantic-ir/spec.md
 
-export const IR_VERSION = "1.6"
+export const IR_VERSION = "1.7"
 
 // ---------------------------------------------------------------------------
 // IR Node Types
@@ -150,7 +150,6 @@ export const LEGACY_EDGE_RELATIONS: ReadonlyArray<string> = [
   "opens_transaction",   // → needs IR equivalent
   "policy_check",        // → needs IR equivalent
   "responds_with",       // → needs IR equivalent
-  "within_transaction",  // → needs IR equivalent
   "missing_tenant_scope",// → needs IR equivalent
   "ir:includes",         // → needs IR normalization
   "guards",              // → ir:guards (string, not constant)

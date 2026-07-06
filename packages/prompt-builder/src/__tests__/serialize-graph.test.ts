@@ -86,3 +86,50 @@ describe("serializeExecutionPath", () => {
     expect(out).not.toContain("[MUTATES]")
   })
 })
+
+// ---- IR v1.5 Phase 3: transaction scope -----------------------------------
+// A mutating node with no ir:wraps edge pointing at it is NOT inside any
+// transaction — that absence must be a visible, positive statement (see
+// research/semantic-ir/v1.5-semantic-fidelity-plan.md, Phase 3).
+
+describe("serializeExecutionPath — transaction scope (IR v1.5 Phase 3)", () => {
+  const TXN_GRAPH: IntermediateExecutionGraph = {
+    entrypoint: "DELETE /users/{user}",
+    method: "DELETE",
+    path: "/users/{user}",
+    annotations: [],
+    nodes: [
+      { id: "ctrl", type: "ir:business_handler", symbol: "UserController::destroy", role: "handler" },
+      { id: "unwrapped", type: "ir:service_call", symbol: "User::apiTokens()->delete", role: "service", mutates: true },
+      { id: "txn",  type: "ir:txn_boundary",      symbol: "DB::transaction", role: "atomicity" },
+      { id: "wrapped", type: "ir:txn_write",      symbol: "AuditLog::create", role: "persistence", mutates: true },
+    ],
+    edges: [
+      { from: "ctrl", to: "unwrapped", relation: "calls",             traceability: "static" },
+      { from: "ctrl", to: "txn",       relation: "opens_transaction", traceability: "static" },
+      { from: "txn",  to: "wrapped",   relation: "ir:wraps",          traceability: "static" },
+    ],
+  }
+
+  test("lists a mutating node with no ir:wraps edge as unwrapped", () => {
+    const out = serializeExecutionPath(TXN_GRAPH)
+    expect(out).toContain("Unwrapped mutations (no transaction boundary):")
+    expect(out).toContain("User::apiTokens()->delete [ir:service_call] — NOT wrapped in a transaction")
+  })
+
+  test("does NOT list a mutating node that has an ir:wraps edge", () => {
+    const out = serializeExecutionPath(TXN_GRAPH)
+    const unwrappedSection = out.split("Unwrapped mutations")[1] ?? ""
+    expect(unwrappedSection).not.toContain("AuditLog::create")
+  })
+
+  test("omits the Unwrapped mutations section entirely when nothing is unwrapped", () => {
+    const fullyWrapped: IntermediateExecutionGraph = {
+      ...TXN_GRAPH,
+      nodes: TXN_GRAPH.nodes.filter((n) => n.id !== "unwrapped"),
+      edges: TXN_GRAPH.edges.filter((e) => e.to !== "unwrapped"),
+    }
+    const out = serializeExecutionPath(fullyWrapped)
+    expect(out).not.toContain("Unwrapped mutations")
+  })
+})

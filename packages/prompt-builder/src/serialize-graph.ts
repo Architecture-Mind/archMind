@@ -1,6 +1,7 @@
 import { readFileSync } from "fs"
 import { join } from "path"
 import type { IntermediateExecutionGraph, ExecutionNode, ExecutionEdge } from "@kidkender/archmind-protocol"
+import { IR_EDGE_RELATIONS } from "@kidkender/archmind-protocol"
 
 function extractMethodSnippet(fileContent: string, methodName: string, maxLines = 25): string | null {
   const lines = fileContent.split("\n")
@@ -44,6 +45,21 @@ function serializeEdge(edge: ExecutionEdge, symbolById: Map<string, string>): st
   return `  ${from} → ${to}  [${edge.relation}]${via}`
 }
 
+// Nodes wrapped by a transaction boundary have an incoming ir:wraps edge
+// (see graph-augmenter's addTransactionNodes). A mutating node with no such
+// edge is NOT inside any transaction — that absence must be a visible,
+// positive statement rather than something the LLM has to infer (IR v1.5 Phase 3).
+function serializeUnwrappedMutations(graph: IntermediateExecutionGraph): string | null {
+  const wrappedIds = new Set(
+    graph.edges.filter((e) => e.relation === IR_EDGE_RELATIONS.WRAPS).map((e) => e.to)
+  )
+  const unwrapped = graph.nodes.filter((n) => n.mutates && !wrappedIds.has(n.id))
+  if (unwrapped.length === 0) return null
+
+  const lines = unwrapped.map((n) => `  ${n.symbol} [${n.type}] — NOT wrapped in a transaction`)
+  return "Unwrapped mutations (no transaction boundary):\n" + lines.join("\n")
+}
+
 export function serializeExecutionPath(graph: IntermediateExecutionGraph, projectRoot?: string): string {
   const symbolById = new Map(graph.nodes.map((n) => [n.id, n.symbol]))
   const header = `Execution path: ${graph.entrypoint}\n`
@@ -51,5 +67,6 @@ export function serializeExecutionPath(graph: IntermediateExecutionGraph, projec
   const effectiveRoot = graph.nodes.length <= SNIPPET_NODE_THRESHOLD ? projectRoot : undefined
   const nodes = "Nodes:\n" + graph.nodes.map((n) => serializeNode(n, effectiveRoot)).join("\n")
   const edges = "Edges:\n" + graph.edges.map((e) => serializeEdge(e, symbolById)).join("\n")
-  return `${header}\n${nodes}\n\n${edges}`
+  const unwrappedSection = serializeUnwrappedMutations(graph)
+  return `${header}\n${nodes}\n\n${edges}${unwrappedSection ? `\n\n${unwrappedSection}` : ""}`
 }

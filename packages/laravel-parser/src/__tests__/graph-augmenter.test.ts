@@ -177,6 +177,53 @@ describe("augmentGraph — IR v1.5 Phase 2: mutation vs. reference", () => {
   })
 })
 
+describe("augmentGraph — IR v1.5 Phase 3: transaction scope", () => {
+  let augmented: IntermediateExecutionGraph
+
+  const SKELETON_USER_DESTROY: IntermediateExecutionGraph = {
+    entrypoint: "DELETE /users/{user}",
+    method: "DELETE", path: "/users/{user}",
+    nodes: [
+      {
+        id: "ctrl_usercontroller_destroy", type: "ir:business_handler",
+        symbol: "UserController::destroy", role: "handler",
+        file: "app/Http/Controllers/UserController.php",
+      },
+    ],
+    edges:       [],
+    annotations: [],
+  }
+
+  beforeAll(() => {
+    augmented = augmentGraph(SKELETON_USER_DESTROY, { projectRoot: FIXTURES })
+  })
+
+  test("emits an ir:wraps edge from the txn boundary to the wrapped write", () => {
+    const txnNode   = augmented.nodes.find((n) => n.type === "ir:txn_boundary")
+    const writeNode = augmented.nodes.find((n) => n.type === "ir:txn_write" && n.symbol === "AuditLog::create")
+    expect(txnNode).toBeDefined()
+    expect(writeNode).toBeDefined()
+    const wrapsEdge = augmented.edges.find(
+      (e) => e.relation === "ir:wraps" && e.from === txnNode!.id && e.to === writeNode!.id
+    )
+    expect(wrapsEdge).toBeDefined()
+  })
+
+  test("the wrapped write is marked mutates: true", () => {
+    const writeNode = augmented.nodes.find((n) => n.type === "ir:txn_write" && n.symbol === "AuditLog::create")
+    expect(writeNode?.mutates).toBe(true)
+  })
+
+  test("the outside-transaction mutation has no ir:wraps edge pointing at it", () => {
+    const outsideNode = augmented.nodes.find(
+      (n) => n.type === "ir:service_call" && n.symbol === "User::apiTokens()->delete"
+    )
+    expect(outsideNode).toBeDefined()
+    const wrapsEdge = augmented.edges.find((e) => e.relation === "ir:wraps" && e.to === outsideNode!.id)
+    expect(wrapsEdge).toBeUndefined()
+  })
+})
+
 describe("augmentGraph — missing file field", () => {
   test("returns graph unchanged when controller has no file field", () => {
     const noFile: IntermediateExecutionGraph = {

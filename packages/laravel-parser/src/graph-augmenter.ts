@@ -602,7 +602,8 @@ function addTransactionNodes(
       traceability: "static",
     })
 
-    // Transactional writes
+    // Transactional writes — WRAPS makes containment explicit so retrieval/
+    // prompt-building can tell "inside this transaction" from "not" (IR v1.5 Phase 3).
     block.writes.forEach((w, wIdx) => {
       const writeId = `txn_write_${callerNodeId}_${blockIdx}_${wIdx}`
       nodes.push({
@@ -610,11 +611,12 @@ function addTransactionNodes(
         type: IR_NODE_TYPES.TXN_WRITE,
         symbol: `${w.className}::${w.operation}`,
         role:   "persistence",
+        mutates: true,
       })
       edges.push({
         from:         txnId,
         to:           writeId,
-        relation:     "within_transaction",
+        relation:     IR_EDGE_RELATIONS.WRAPS,
         traceability: "static",
       })
     })
@@ -631,7 +633,7 @@ function addTransactionNodes(
       edges.push({
         from:         txnId,
         to:           escapeId,
-        relation:     "within_transaction",
+        relation:     IR_EDGE_RELATIONS.WRAPS,
         traceability: "static",
       })
       edges.push({
