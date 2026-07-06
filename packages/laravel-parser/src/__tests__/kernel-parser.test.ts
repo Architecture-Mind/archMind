@@ -31,12 +31,12 @@ describe("parseKernel", () => {
 describe("parseRouteFile — alias resolution", () => {
   const KERNEL = join(FIXTURES, "app/Http/Kernel.php")
 
-  test("without aliasMap: role:admin emits generic middleware node", () => {
+  test("without aliasMap: role:admin emits honest unknown_middleware node", () => {
     const graphs = parseRouteFile(join(FIXTURES, "routes-alias.php"))
     const g = graphs.find((g) => g.path === "/reports")!
     const roleNode = g.nodes.find((n) => n.symbol === "role:admin")
     expect(roleNode).toBeDefined()
-    expect(roleNode!.type).toBe("ir:auth_gate")
+    expect(roleNode!.type).toBe("ir:unknown_middleware")
   })
 
   test("with aliasMap: role:admin resolves to authorization_check", () => {
@@ -66,14 +66,16 @@ describe("parseRouteFile — alias resolution", () => {
     expect(authNode!.symbol).toBe("auth:sanctum")
   })
 
-  test("with aliasMap: tenant alias in nested group resolves to ResolveTenant", () => {
+  test("with aliasMap: tenant alias in nested group resolves to ResolveTenant, honestly unclassified", () => {
     const aliasMap = parseKernel(KERNEL)
     const graphs = parseRouteFile(join(FIXTURES, "routes-alias.php"), { aliasMap })
     const g = graphs.find((g) => g.path === "/projects/{project}")!
     expect(g).toBeDefined()
     const tenantNode = g.nodes.find((n) => n.symbol === "ResolveTenant")
     expect(tenantNode).toBeDefined()
-    expect(tenantNode!.type).toBe("ir:auth_gate")
+    // ResolveTenant doesn't match any known auth/authz allowlist pattern — it should
+    // NOT be guessed as an auth_gate (IR v1.5 plan, Phase 1 bullet 4).
+    expect(tenantNode!.type).toBe("ir:unknown_middleware")
   })
 
   test("with aliasMap: /projects/{project} has full inherited middleware stack", () => {
@@ -81,8 +83,8 @@ describe("parseRouteFile — alias resolution", () => {
     const graphs = parseRouteFile(join(FIXTURES, "routes-alias.php"), { aliasMap })
     const g = graphs.find((g) => g.path === "/projects/{project}")!
     const types = g.nodes.map((n) => n.type)
-    expect(types).toContain("ir:auth_gate")
-    expect(types).toContain("ir:auth_gate")          // ResolveTenant
+    expect(types).toContain("ir:auth_gate")          // auth:sanctum
+    expect(types).toContain("ir:unknown_middleware") // ResolveTenant
     expect(types).toContain("ir:business_handler")
   })
 })

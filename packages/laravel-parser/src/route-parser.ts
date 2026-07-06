@@ -25,6 +25,10 @@ export interface ParseOptions {
   aliasMap?:   AliasMap                 // Kernel.php alias → FQCN map for alias resolution
   namespaces?: Record<string, string>   // PSR-4 namespace → dir map (from composer.json)
   projectRoot?: string
+  // Middleware wrapping this entire file from an outer Route::group() in
+  // RouteServiceProvider.php (Laravel <=10) — resolved to concrete FQCNs where
+  // possible. Seeds the middleware stack before the file's own groups are walked.
+  wrappingMiddleware?: string[]
 }
 
 export function parseRouteFile(
@@ -32,7 +36,7 @@ export function parseRouteFile(
   opts: ParseOptions = {}
 ): IntermediateExecutionGraph[] {
   const out: IntermediateExecutionGraph[] = []
-  processFile(filePath, { middleware: [], prefix: "" }, out, opts)
+  processFile(filePath, { middleware: [...(opts.wrappingMiddleware ?? [])], prefix: "" }, out, opts)
   return out
 }
 
@@ -279,6 +283,10 @@ function buildGraph(
     const resolved = opts.aliasMap ? resolveAlias(raw, opts.aliasMap) : null
     if (resolved) {
       nodes.push(resolvedMiddlewareToNode(raw, resolved.fqcn, resolved.args, i))
+    } else if (raw.includes("\\")) {
+      // Already a fully-qualified class name (e.g. resolved from Kernel.php's
+      // $middlewareGroups) — classify by the real class, not a bare-string guess.
+      nodes.push(resolvedMiddlewareToNode(raw, raw, [], i))
     } else {
       nodes.push(middlewareToNode(raw, i))
     }

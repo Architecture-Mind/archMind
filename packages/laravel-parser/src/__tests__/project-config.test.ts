@@ -5,6 +5,7 @@ import {
   expandRouteGlob,
   expandRouteFiles,
   resolvePolicyFile,
+  resolveAliasMap,
   DEFAULT_PROJECT_CONFIG,
 } from "../project-config.js"
 
@@ -161,5 +162,55 @@ describe("resolvePolicyFile", () => {
 
     const result = resolvePolicyFile(root, "TaskPolicy", [])
     expect(result).toBe("app/Policies/TaskPolicy.php")
+  })
+})
+
+// ---- resolveAliasMap — RouteServiceProvider wrapping (IR v1.5 Phase 1) ------
+
+describe("resolveAliasMap — RouteServiceProvider wrapping", () => {
+  test("resolves BookStack-shaped api group to a concrete FQCN for the wrapped route file", () => {
+    const root = makeDir("rsp_bookstack")
+    mkdirSync(join(root, "app", "Http"), { recursive: true })
+    writeFileSync(
+      join(root, "app", "Http", "Kernel.php"),
+      `<?php
+namespace App\\Http;
+use Illuminate\\Foundation\\Http\\Kernel as HttpKernel;
+class Kernel extends HttpKernel {
+    protected $middlewareGroups = [
+        'api' => [\\App\\Http\\Middleware\\ApiAuthenticate::class],
+    ];
+}`,
+      "utf-8"
+    )
+    mkdirSync(join(root, "app", "Providers"), { recursive: true })
+    writeFileSync(
+      join(root, "app", "Providers", "RouteServiceProvider.php"),
+      `<?php
+namespace App\\Providers;
+use Illuminate\\Support\\Facades\\Route;
+class RouteServiceProvider {
+    public function boot() {
+        Route::group(['middleware' => 'api'], function () {
+            require base_path('routes/api.php');
+        });
+    }
+}`,
+      "utf-8"
+    )
+    makeFile("rsp_bookstack", "routes", "api.php")
+
+    const result = resolveAliasMap(root, DEFAULT_PROJECT_CONFIG)
+    expect(result.routeWrapping.get("routes/api.php")).toEqual(["App\\Http\\Middleware\\ApiAuthenticate"])
+  })
+
+  test("returns an empty routeWrapping when no RouteServiceProvider.php exists", () => {
+    const root = makeDir("rsp_absent")
+    mkdirSync(join(root, "app", "Http"), { recursive: true })
+    writeFileSync(join(root, "app", "Http", "Kernel.php"), "<?php", "utf-8")
+    makeFile("rsp_absent", "routes", "api.php")
+
+    const result = resolveAliasMap(root, DEFAULT_PROJECT_CONFIG)
+    expect(result.routeWrapping.size).toBe(0)
   })
 })

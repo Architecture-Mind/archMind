@@ -5,6 +5,8 @@ import {
   augmentGraph,
   loadProjectConfig,
   resolveAliasMap,
+  parseSchedule,
+  parseQueuedJobs,
 } from "@kidkender/archmind-laravel-parser"
 import { parseNestJSProject } from "@kidkender/archmind-nestjs-parser"
 import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
@@ -115,14 +117,25 @@ export function parseProject(projectRoot: string): ParsedProject {
 
   // Default: Laravel
   const config = loadProjectConfig(projectRoot)
-  const { aliasMap, routeFiles } = resolveAliasMap(projectRoot, config)
+  const { aliasMap, routeFiles, routeWrapping } = resolveAliasMap(projectRoot, config)
 
   const graphs: IntermediateExecutionGraph[] = []
   for (const relFile of routeFiles) {
-    const skeletons = parseRouteFile(join(projectRoot, relFile), { aliasMap, namespaces: config.namespaces })
+    const wrappingMiddleware = routeWrapping.get(relFile)
+    const skeletons = parseRouteFile(join(projectRoot, relFile), { aliasMap, namespaces: config.namespaces, wrappingMiddleware })
     for (const g of skeletons) {
       graphs.push(augmentGraph(g, { projectRoot, config }))
     }
+  }
+
+  const kernelPath = join(projectRoot, "app/Console/Kernel.php")
+  if (existsSync(kernelPath)) {
+    graphs.push(...parseSchedule(kernelPath))
+  }
+
+  const jobsDir = join(projectRoot, "app/Jobs")
+  if (existsSync(jobsDir)) {
+    graphs.push(...parseQueuedJobs(jobsDir))
   }
 
   return {

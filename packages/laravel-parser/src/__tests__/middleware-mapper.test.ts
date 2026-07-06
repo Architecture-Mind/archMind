@@ -57,9 +57,9 @@ describe("middlewareToNode", () => {
     expect(node.args).toContain("App\\Http\\Middleware\\ResolveTenant")
   })
 
-  test("unknown middleware → generic middleware node", () => {
+  test("unknown middleware → honest unknown_middleware node, not a guessed auth_gate", () => {
     const node = middlewareToNode("some-unknown-middleware", 0)
-    expect(node.type).toBe("ir:auth_gate")
+    expect(node.type).toBe("ir:unknown_middleware")
   })
 
   test("node id is unique by index and name", () => {

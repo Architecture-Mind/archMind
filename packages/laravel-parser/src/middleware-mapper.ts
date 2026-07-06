@@ -28,7 +28,10 @@ function classifyFqcn(fqcn: string): MiddlewareMapping {
   if (/Throttle|RateLimit/.test(short)) {
     return { type: "rate_limiter", role: "rate_limiting" }
   }
-  return { type: IR_NODE_TYPES.AUTH_GATE, role: "middleware" }
+  // Resolved to a concrete class, but it doesn't match a known category —
+  // an honest "don't know" instead of guessing auth_gate from the mere presence
+  // of a middleware node (see IR v1.5 semantic-fidelity plan, Phase 1).
+  return { type: IR_NODE_TYPES.UNKNOWN_MIDDLEWARE, role: "unknown" }
 }
 
 /**
@@ -94,7 +97,11 @@ function mapMiddleware(raw: string): MiddlewareMapping {
     return { type: IR_NODE_TYPES.AUTH_GATE, role: "middleware", args: [raw] }
   }
 
-  return { type: IR_NODE_TYPES.AUTH_GATE, role: "middleware" }
+  // Bare, unresolved string with no class/keyword signal (e.g. a group name like
+  // "api" that couldn't be resolved to its concrete middleware list) — an honest
+  // "don't know" instead of defaulting every unrecognized string to auth_gate,
+  // which was the source of the koel false-positive (IR v1.5 plan, Phase 1).
+  return { type: IR_NODE_TYPES.UNKNOWN_MIDDLEWARE, role: "unknown" }
 }
 
 export function middlewareToNode(raw: string, index: number): ExecutionNode {

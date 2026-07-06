@@ -4,7 +4,7 @@
 //
 // Spec: research/semantic-ir/spec.md
 
-export const IR_VERSION = "1.4"
+export const IR_VERSION = "1.5"
 
 // ---------------------------------------------------------------------------
 // IR Node Types
@@ -48,6 +48,9 @@ export const IR_NODE_TYPES = {
   // Side-effect domain (IR v1.4)
   NOTIFICATION:        "ir:notification",
   MAIL:                "ir:mail",
+
+  // Semantic fidelity domain (IR v1.5)
+  UNKNOWN_MIDDLEWARE:  "ir:unknown_middleware",  // resolved name but unclassified — honest "don't know" instead of a guessed auth_gate
 } as const
 
 export type IRNodeType = typeof IR_NODE_TYPES[keyof typeof IR_NODE_TYPES]

@@ -1,8 +1,9 @@
 import { readFileSync, existsSync, readdirSync, statSync } from "fs"
 import { join, relative, dirname, basename } from "path"
 import type { ProjectConfig } from "@kidkender/archmind-protocol"
-import { parseKernel, type AliasMap } from "./kernel-parser.js"
+import { parseKernel, parseMiddlewareGroups, type AliasMap } from "./kernel-parser.js"
 import { parseBootstrap } from "./bootstrap-parser.js"
+import { parseRouteServiceProvider } from "./route-service-provider-parser.js"
 
 export const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   routeFiles: ["routes/api.php"],
@@ -313,6 +314,14 @@ export interface ResolvedAliases {
   aliasMap: AliasMap
   /** Effective route files — from bootstrap/app.php if detected, else from config */
   routeFiles: string[]
+  /**
+   * Route file path (relative to projectRoot) → resolved wrapping middleware
+   * (concrete FQCNs where the group name was found in $middlewareGroups, else the
+   * raw group name) — from an outer Route::group() in RouteServiceProvider.php.
+   * Empty for Laravel 11+ projects (bootstrap/app.php has no such wrapping) and for
+   * projects with no RouteServiceProvider.
+   */
+  routeWrapping: Map<string, string[]>
 }
 
 /**
@@ -334,6 +343,7 @@ export function resolveAliasMap(projectRoot: string, config: ProjectConfig): Res
     return {
       aliasMap: parseKernel(kernelPath),
       routeFiles: flattenRouteIncludes(projectRoot, expanded),
+      routeWrapping: resolveRouteServiceProviderWrapping(projectRoot, kernelPath),
     }
   }
 
@@ -352,12 +362,33 @@ export function resolveAliasMap(projectRoot: string, config: ProjectConfig): Res
     return {
       aliasMap,
       routeFiles: flattenRouteIncludes(projectRoot, expanded),
+      routeWrapping: new Map(), // bootstrap/app.php has no RouteServiceProvider group-wrapping pattern
     }
   }
 
   // Unknown structure — expand patterns from config, no aliases
   const expanded = expandRouteFiles(projectRoot, config.routeFiles)
-  return { aliasMap: {}, routeFiles: flattenRouteIncludes(projectRoot, expanded) }
+  return { aliasMap: {}, routeFiles: flattenRouteIncludes(projectRoot, expanded), routeWrapping: new Map() }
+}
+
+/**
+ * Resolve app/Providers/RouteServiceProvider.php's Route::group() wrapping (if present)
+ * into concrete middleware per route file, using Kernel.php's $middlewareGroups to expand
+ * bare group names (e.g. "api") into their concrete middleware class list.
+ */
+function resolveRouteServiceProviderWrapping(projectRoot: string, kernelPath: string): Map<string, string[]> {
+  const rspPath = join(projectRoot, "app", "Providers", "RouteServiceProvider.php")
+  if (!existsSync(rspPath)) return new Map()
+
+  const middlewareGroups = parseMiddlewareGroups(kernelPath)
+  const wrapping = parseRouteServiceProvider(rspPath, projectRoot)
+
+  const resolved = new Map<string, string[]>()
+  for (const [file, groupNames] of wrapping) {
+    const entries = groupNames.flatMap((name) => middlewareGroups[name] ?? [name])
+    resolved.set(file, entries)
+  }
+  return resolved
 }
 
 /** Returns true when .archmind.json exists AND explicitly declares routeFiles. */
