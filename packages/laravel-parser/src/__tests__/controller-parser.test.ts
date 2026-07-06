@@ -11,6 +11,7 @@ const __dirname  = dirname(__filename)
 
 const FIXTURES = join(__dirname, "fixtures")
 const TASK_CTRL = join(FIXTURES, "app/Modules/Task/Http/Controllers/TaskController.php")
+const USER_CTRL = join(FIXTURES, "app/Http/Controllers/UserController.php")
 
 // ---- parseControllerMethod -----------------------------------------------
 
@@ -163,6 +164,29 @@ describe("parseControllerMethod — private method traversal (depth 1)", () => {
     const keys = result!.serviceCalls.map((sc) => `${sc.propertyName}::${sc.method}`)
     const unique = new Set(keys)
     expect(keys.length).toBe(unique.size)
+  })
+})
+
+// ---- IR v1.5 Phase 2: mutation vs. reference -----------------------------
+// $user->apiTokens()->delete() must fold the terminal mutating call into the
+// service-call node's symbol/method instead of dropping it (see
+// research/semantic-ir/v1.5-semantic-fidelity-plan.md, Phase 2).
+
+describe("parseControllerMethod — mutation vs. reference (relationship-accessor chains)", () => {
+  test("folds a terminal .delete() onto the relationship accessor and marks mutates", () => {
+    const result = parseControllerMethod(USER_CTRL, "destroy")
+    const sc = result!.serviceCalls.find((s) => s.serviceClass === "User")
+    expect(sc).toBeDefined()
+    expect(sc!.method).toBe("apiTokens()->delete")
+    expect(sc!.mutates).toBe(true)
+  })
+
+  test("does NOT mark a read-only chain (.get()) as mutating", () => {
+    const result = parseControllerMethod(USER_CTRL, "show")
+    const sc = result!.serviceCalls.find((s) => s.serviceClass === "User")
+    expect(sc).toBeDefined()
+    expect(sc!.method).toBe("apiTokens")
+    expect(sc!.mutates).toBeUndefined()
   })
 })
 

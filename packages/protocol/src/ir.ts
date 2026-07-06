@@ -4,7 +4,7 @@
 //
 // Spec: research/semantic-ir/spec.md
 
-export const IR_VERSION = "1.5"
+export const IR_VERSION = "1.6"
 
 // ---------------------------------------------------------------------------
 // IR Node Types

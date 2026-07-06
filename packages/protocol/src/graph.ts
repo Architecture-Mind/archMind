@@ -56,6 +56,7 @@ export interface ExecutionNode {
   role?:            string    // semantic hint: "auth_layer_1", "tenant_resolver", etc.
   detail?:          string    // JSON-serialized node-specific metadata (e.g. api_resource field list)
   occurrenceCount?: number    // set by deduplicate() when multiple nodes are merged into one
+  mutates?:         boolean   // true when this call terminates in a data-mutating operation (IR v1.5 Phase 2)
 }
 
 export interface ExecutionEdge {

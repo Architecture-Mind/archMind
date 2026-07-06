@@ -32,8 +32,9 @@ export interface ServiceCall {
   propertyName: string   // injected property name, e.g. "permissionService"
   serviceClass: string   // short class name, e.g. "PermissionService"
   serviceFqcn:  string   // FQCN, e.g. "App\Modules\Access\Services\PermissionService"
-  method:       string   // called method, e.g. "hasPermission"
+  method:       string   // called method, e.g. "hasPermission" or "apiTokens()->delete" for a mutating chain
   args:         string[] // string literal args extracted from the call site
+  mutates?:     boolean  // true when the call chain terminates in a data-mutating operation
 }
 
 export interface ConstructorMiddleware {
@@ -713,6 +714,72 @@ function extractServiceCalls(
   return results
 }
 
+// Terminal mutating calls chained onto a relationship accessor / injected
+// service (e.g. $user->apiTokens()->delete()) must be folded into the base
+// call's node instead of dropped — see IR v1.5 plan, Phase 2.
+const MUTATING_METHODS = new Set([
+  "delete", "update", "save", "create", "attach", "detach", "sync", "forceDelete",
+])
+
+// Matches a member_call_expression against Pattern 1 ($this->prop->method(args))
+// or Pattern 2 ($localVar->method(args)) and returns the resolved ServiceCall,
+// without pushing it to any results array.
+function tryExtractBaseServiceCall(
+  callNode: Parser.SyntaxNode,
+  injections: Map<string, string>
+): ServiceCall | null {
+  const objNode  = callNode.childForFieldName("object")
+  const nameNode = callNode.childForFieldName("name")
+  if (!nameNode) return null
+
+  // Pattern 1: $this->propertyName->method(args)
+  if (objNode?.type === "member_access_expression") {
+    const innerObj = objNode.childForFieldName("object")
+    const propNode = objNode.childForFieldName("name")
+
+    if (innerObj?.text === "$this" && propNode) {
+      const prop = propNode.text
+      const fqcn = injections.get(prop)
+
+      if (fqcn) {
+        const shortName  = fqcn.split("\\").pop() ?? fqcn
+        const argsNode   = callNode.childForFieldName("arguments")
+        const stringArgs = argsNode ? extractStringCallArgs(argsNode) : []
+
+        return {
+          propertyName: prop,
+          serviceClass: shortName,
+          serviceFqcn:  fqcn,
+          method:       nameNode.text,
+          args:         stringArgs,
+        }
+      }
+    }
+  }
+
+  // Pattern 2: $localVar->method(args) — method-injected service or model param
+  if (objNode?.type === "variable_name") {
+    const varName = objNode.text.replace(/^\$/, "")
+    const fqcn    = injections.get(varName)
+
+    if (fqcn) {
+      const shortName  = fqcn.split("\\").pop() ?? fqcn
+      const argsNode   = callNode.childForFieldName("arguments")
+      const stringArgs = argsNode ? extractStringCallArgs(argsNode) : []
+
+      return {
+        propertyName: varName,
+        serviceClass: shortName,
+        serviceFqcn:  fqcn,
+        method:       nameNode.text,
+        args:         stringArgs,
+      }
+    }
+  }
+
+  return null
+}
+
 function gatherServiceCalls(
   node: Parser.SyntaxNode,
   injections: Map<string, string>,
@@ -723,50 +790,28 @@ function gatherServiceCalls(
     const nameNode = node.childForFieldName("name")
 
     if (nameNode) {
-      // Pattern 1: $this->propertyName->method(args)
-      if (objNode?.type === "member_access_expression") {
-        const innerObj = objNode.childForFieldName("object")
-        const propNode = objNode.childForFieldName("name")
-
-        if (innerObj?.text === "$this" && propNode) {
-          const prop = propNode.text
-          const fqcn = injections.get(prop)
-
-          if (fqcn) {
-            const shortName  = fqcn.split("\\").pop() ?? fqcn
-            const argsNode   = node.childForFieldName("arguments")
-            const stringArgs = argsNode ? extractStringCallArgs(argsNode) : []
-
-            results.push({
-              propertyName: prop,
-              serviceClass: shortName,
-              serviceFqcn:  fqcn,
-              method:       nameNode.text,
-              args:         stringArgs,
-            })
-          }
-        }
-      }
-
-      // Pattern 2: $localVar->method(args) — method-injected service
-      if (objNode?.type === "variable_name") {
-        const varName = objNode.text.replace(/^\$/, "")
-        const fqcn    = injections.get(varName)
-
-        if (fqcn) {
-          const shortName  = fqcn.split("\\").pop() ?? fqcn
-          const argsNode   = node.childForFieldName("arguments")
-          const stringArgs = argsNode ? extractStringCallArgs(argsNode) : []
-
+      // Terminal mutating call chained onto a resolvable base, e.g.
+      // $user->apiTokens()->delete() — fold into one node instead of dropping
+      // the mutation or double-emitting the base accessor separately.
+      if (objNode?.type === "member_call_expression" && MUTATING_METHODS.has(nameNode.text)) {
+        const base = tryExtractBaseServiceCall(objNode, injections)
+        if (base) {
           results.push({
-            propertyName: varName,
-            serviceClass: shortName,
-            serviceFqcn:  fqcn,
-            method:       nameNode.text,
-            args:         stringArgs,
+            ...base,
+            method:  `${base.method}()->${nameNode.text}`,
+            mutates: true,
           })
+          // objNode is fully consumed by the combined node above — recurse
+          // into the rest of the chain but skip re-visiting it standalone.
+          for (const child of node.children as Parser.SyntaxNode[]) {
+            if (child !== objNode) gatherServiceCalls(child, injections, results)
+          }
+          return
         }
       }
+
+      const base = tryExtractBaseServiceCall(node, injections)
+      if (base) results.push(base)
     }
   }
 

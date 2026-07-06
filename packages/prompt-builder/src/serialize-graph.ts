@@ -28,7 +28,8 @@ const SNIPPET_NODE_THRESHOLD = 20
 
 function serializeNode(node: ExecutionNode, projectRoot?: string): string {
   const argsStr = node.args?.length ? `(${node.args.join(", ")})` : ""
-  const header = `  ${node.symbol}${argsStr} [${node.type}]`
+  const mutatesStr = node.mutates ? " [MUTATES]" : ""
+  const header = `  ${node.symbol}${argsStr} [${node.type}]${mutatesStr}`
   if (!projectRoot) return header
   const snippet = loadCodeSlice(node, projectRoot)
   if (!snippet) return header

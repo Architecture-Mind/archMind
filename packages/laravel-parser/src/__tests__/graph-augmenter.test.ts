@@ -145,6 +145,38 @@ describe("augmentGraph — service_call extraction", () => {
   })
 })
 
+describe("augmentGraph — IR v1.5 Phase 2: mutation vs. reference", () => {
+  let augmented: IntermediateExecutionGraph
+
+  const SKELETON_USER_DESTROY: IntermediateExecutionGraph = {
+    entrypoint: "DELETE /users/{user}",
+    method: "DELETE", path: "/users/{user}",
+    nodes: [
+      {
+        id: "ctrl_usercontroller_destroy", type: "ir:business_handler",
+        symbol: "UserController::destroy", role: "handler",
+        file: "app/Http/Controllers/UserController.php",
+      },
+    ],
+    edges:       [],
+    annotations: [],
+  }
+
+  beforeAll(() => {
+    augmented = augmentGraph(SKELETON_USER_DESTROY, { projectRoot: FIXTURES })
+  })
+
+  test("folds the terminal .delete() into the service_call node's symbol", () => {
+    const sc = augmented.nodes.find((n) => n.type === "ir:service_call" && n.symbol === "User::apiTokens()->delete")
+    expect(sc).toBeDefined()
+  })
+
+  test("marks the node mutates: true", () => {
+    const sc = augmented.nodes.find((n) => n.type === "ir:service_call" && n.symbol === "User::apiTokens()->delete")
+    expect(sc?.mutates).toBe(true)
+  })
+})
+
 describe("augmentGraph — missing file field", () => {
   test("returns graph unchanged when controller has no file field", () => {
     const noFile: IntermediateExecutionGraph = {

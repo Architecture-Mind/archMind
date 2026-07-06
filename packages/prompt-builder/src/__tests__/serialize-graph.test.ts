@@ -68,4 +68,21 @@ describe("serializeExecutionPath", () => {
     const out = serializeExecutionPath(AUTH_GRAPH)
     expect(out).toContain("task.update")
   })
+
+  test("renders [MUTATES] marker for nodes with mutates: true (IR v1.5 Phase 2)", () => {
+    const graph: IntermediateExecutionGraph = {
+      ...AUTH_GRAPH,
+      nodes: [
+        ...AUTH_GRAPH.nodes,
+        { id: "svc3", type: "service_call", symbol: "User::apiTokens()->delete", role: "service", mutates: true },
+      ],
+    }
+    const out = serializeExecutionPath(graph)
+    expect(out).toContain("User::apiTokens()->delete [service_call] [MUTATES]")
+  })
+
+  test("does not render [MUTATES] marker for non-mutating nodes", () => {
+    const out = serializeExecutionPath(AUTH_GRAPH)
+    expect(out).not.toContain("[MUTATES]")
+  })
 })

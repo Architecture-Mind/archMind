@@ -450,6 +450,7 @@ function addServiceCallNodes(
       role:   "service",
       ...(file               ? { file }      : {}),
       ...(sc.args.length > 0 ? { args: sc.args } : {}),
+      ...(sc.mutates         ? { mutates: true } : {}),
     }
 
     nodes.push(node)
