@@ -224,6 +224,46 @@ describe("augmentGraph — IR v1.5 Phase 3: transaction scope", () => {
   })
 })
 
+describe("augmentGraph — IR v1.5 Phase 4: guard clause / abort semantics", () => {
+  let augmented: IntermediateExecutionGraph
+
+  const SKELETON_USER_DESTROY: IntermediateExecutionGraph = {
+    entrypoint: "DELETE /users/{user}",
+    method: "DELETE", path: "/users/{user}",
+    nodes: [
+      {
+        id: "ctrl_usercontroller_destroy", type: "ir:business_handler",
+        symbol: "UserController::destroy", role: "handler",
+        file: "app/Http/Controllers/UserController.php",
+      },
+    ],
+    edges:       [],
+    annotations: [],
+  }
+
+  beforeAll(() => {
+    augmented = augmentGraph(SKELETON_USER_DESTROY, { projectRoot: FIXTURES })
+  })
+
+  test("classifies UserRepo::ensureDeletable as ir:guard_clause, not ir:service_call", () => {
+    const guard = augmented.nodes.find((n) => n.symbol === "UserRepo::ensureDeletable")
+    expect(guard).toBeDefined()
+    expect(guard?.type).toBe("ir:guard_clause")
+    expect(guard?.role).toBe("guard")
+  })
+
+  test("emits an ir:guards edge from the guard clause to the subsequent mutation", () => {
+    const guard  = augmented.nodes.find((n) => n.symbol === "UserRepo::ensureDeletable")
+    const target = augmented.nodes.find((n) => n.symbol === "User::apiTokens()->delete")
+    expect(guard).toBeDefined()
+    expect(target).toBeDefined()
+    const guardsEdge = augmented.edges.find(
+      (e) => e.relation === "ir:guards" && e.from === guard!.id && e.to === target!.id
+    )
+    expect(guardsEdge).toBeDefined()
+  })
+})
+
 describe("augmentGraph — missing file field", () => {
   test("returns graph unchanged when controller has no file field", () => {
     const noFile: IntermediateExecutionGraph = {

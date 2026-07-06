@@ -3,13 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\UserRepo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
 class UserController
 {
+    public function __construct(
+        private UserRepo $userRepo,
+    ) {}
+
     public function destroy(User $user): JsonResponse
     {
+        // Guard clause — can abort everything below via throw (IR v1.5 Phase 4).
+        $this->userRepo->ensureDeletable($user);
+
         // Outside any transaction — must NOT be reported as wrapped (IR v1.5 Phase 3).
         $user->apiTokens()->delete();
 

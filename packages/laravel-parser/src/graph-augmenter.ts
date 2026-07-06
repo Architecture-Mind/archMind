@@ -38,6 +38,13 @@ function isoRes(cache: ParseCache<unknown> | null, filePath: string, opts: { ten
   // opts are constant per project root, so discriminator doesn't need to include them
   return (cache as ParseCache<IsoRes>).compute(filePath, "parseIsolation", () => parseIsolation(filePath, opts))
 }
+
+type GuardRes = ReturnType<typeof detectGuardClause>
+
+function guardRes(cache: ParseCache<unknown> | null, filePath: string, methodName: string): GuardRes {
+  if (!cache) return detectGuardClause(filePath, methodName)
+  return (cache as ParseCache<GuardRes>).compute(filePath, `guardClause::${methodName}`, () => detectGuardClause(filePath, methodName))
+}
 import { parseControllerMethod, parseFormRequestAuthorize, type ServiceCall, type ModelParam, type StandaloneDispatch, type NotificationDispatch } from "./controller-parser.js"
 import type { ListenerEntry } from "./event-listener-mapper.js"
 import { middlewareToNode } from "./middleware-mapper.js"
@@ -47,6 +54,7 @@ import { extractPermissionNodes } from "./permission-extractor/constants.js"
 import { buildHierarchyEdges } from "./permission-extractor/hierarchy.js"
 import { parseTransactions } from "./transaction-parser.js"
 import { parseIsolation } from "./isolation-parser.js"
+import { detectGuardClause } from "./guard-clause-parser.js"
 import { DEFAULT_PROJECT_CONFIG, fqcnToPath, resolvePolicyFile } from "./project-config.js"
 import { parseApiResource, type NestedResourceRef } from "./resource-parser.js"
 import { ParseCache } from "./parse-cache.js"
@@ -207,7 +215,7 @@ export function augmentGraph(
         injectConstructorMiddleware(newNodes, newEdges, ctrlNode.id, l1.constructorMiddleware, methodName)
 
         // Service calls from controller action
-        const ctrlServiceNodes = addServiceCallNodes(newNodes, newEdges, ctrlNode.id, l1.serviceCalls, config.namespaces)
+        const ctrlServiceNodes = addServiceCallNodes(newNodes, newEdges, ctrlNode.id, l1.serviceCalls, config.namespaces, opts.projectRoot, cache)
 
         // Service calls from policy methods
         const policyServiceNodes: ExecutionNode[] = []
@@ -217,7 +225,7 @@ export function augmentGraph(
           if (!policyMethod) continue
           const policyL1 = ctrlL1(cache, join(opts.projectRoot, policyNode.file), policyMethod)
           if (policyL1) {
-            const created = addServiceCallNodes(newNodes, newEdges, policyNode.id, policyL1.serviceCalls, config.namespaces)
+            const created = addServiceCallNodes(newNodes, newEdges, policyNode.id, policyL1.serviceCalls, config.namespaces, opts.projectRoot, cache)
             policyServiceNodes.push(...created)
           }
         }
@@ -252,7 +260,7 @@ export function augmentGraph(
     const filePath = join(opts.projectRoot, mwNode.file)
     const l1 = ctrlL1(cache, filePath, "handle")
     if (l1) {
-      const mwServiceNodes = addServiceCallNodes(newNodes, newEdges, mwNode.id, l1.serviceCalls, config.namespaces)
+      const mwServiceNodes = addServiceCallNodes(newNodes, newEdges, mwNode.id, l1.serviceCalls, config.namespaces, opts.projectRoot, cache)
       // Also expand service calls from middleware
       const mwExpandRoots = mwServiceNodes.filter((n) => !!n.file && matchesExpansionFocus(n, opts.expansionFocus))
       if (mwExpandRoots.length > 0) {
@@ -428,7 +436,9 @@ function addServiceCallNodes(
   edges: ExecutionEdge[],
   callerNodeId: string,
   serviceCalls: ServiceCall[],
-  namespaces: Record<string, string>
+  namespaces: Record<string, string>,
+  projectRoot: string,
+  cache: ParseCache<unknown> | null = null
 ): ExecutionNode[] {
   const seen    = new Set<string>()
   const created: ExecutionNode[] = []
@@ -443,11 +453,18 @@ function addServiceCallNodes(
 
     const file = sc.serviceFqcn.includes("\\") ? (fqcnToPath(sc.serviceFqcn, namespaces) ?? undefined) : undefined
 
+    // Guard-clause detection (IR v1.5 Phase 4) — a resolvable call whose body
+    // can abort the caller via throw/abort based on a precondition gets its
+    // own node type instead of a generic service_call.
+    const guard = file
+      ? guardRes(cache, join(projectRoot, file), sc.method)
+      : { isGuardClause: false, reason: null }
+
     const node: ExecutionNode = {
       id,
-      type: IR_NODE_TYPES.SERVICE_CALL,
+      type: guard.isGuardClause ? IR_NODE_TYPES.GUARD_CLAUSE : IR_NODE_TYPES.SERVICE_CALL,
       symbol: `${sc.serviceClass}::${sc.method}`,
-      role:   "service",
+      role:   guard.isGuardClause ? "guard" : "service",
       ...(file               ? { file }      : {}),
       ...(sc.args.length > 0 ? { args: sc.args } : {}),
       ...(sc.mutates         ? { mutates: true } : {}),
@@ -463,6 +480,21 @@ function addServiceCallNodes(
       traceability: "semantic",
     })
   }
+
+  // A guard clause protects the calls that follow it in the same caller —
+  // make that explicit via ir:guards edges instead of leaving it an inference
+  // (IR v1.5 Phase 4).
+  created.forEach((node, idx) => {
+    if (node.type !== IR_NODE_TYPES.GUARD_CLAUSE) return
+    for (const protectedNode of created.slice(idx + 1)) {
+      edges.push({
+        from:         node.id,
+        to:           protectedNode.id,
+        relation:     IR_EDGE_RELATIONS.GUARDS,
+        traceability: "semantic",
+      })
+    }
+  })
 
   return created
 }
@@ -564,7 +596,7 @@ function expandServiceCalls(
     try {
       const l1 = ctrlL1(cache, filePath, methodName)
       if (l1 && l1.serviceCalls.length > 0) {
-        const newSvcNodes = addServiceCallNodes(nodes, edges, scNode.id, l1.serviceCalls, config.namespaces)
+        const newSvcNodes = addServiceCallNodes(nodes, edges, scNode.id, l1.serviceCalls, config.namespaces, projectRoot, cache)
         budget.remaining -= newSvcNodes.length
         nextServiceNodes.push(
           ...newSvcNodes.filter((n) => !!n.file && matchesExpansionFocus(n, focus))
