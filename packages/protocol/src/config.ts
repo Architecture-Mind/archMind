@@ -12,6 +12,12 @@ export interface ProjectConfig {
     tenantSignals: string[]
     /** Laravel container keys that resolve the current tenant */
     tenantContainerKeys: string[]
+    /**
+     * Call symbols recognized as audit/activity-log sinks, e.g. "Activity::add"
+     * or "activity()->log" (spatie/laravel-activitylog). A matching call is
+     * classified as ir:audit_log instead of a generic ir:service_call.
+     */
+    auditSinks: string[]
   }
 }
 

@@ -26,6 +26,10 @@ class UserController
             AuditLog::create(['action' => 'user_deleted', 'user_id' => $user->id]);
         });
 
+        // Durable audit trail — must be classified as ir:audit_log, not a
+        // generic ir:service_call (IR v1.5 Phase 5).
+        Activity::add(ActivityType::USER_DELETE, $user);
+
         return response()->json(['deleted' => true]);
     }
 

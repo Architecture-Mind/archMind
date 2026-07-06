@@ -4,7 +4,7 @@
 //
 // Spec: research/semantic-ir/spec.md
 
-export const IR_VERSION = "1.8"
+export const IR_VERSION = "1.9"
 
 // ---------------------------------------------------------------------------
 // IR Node Types
@@ -52,6 +52,7 @@ export const IR_NODE_TYPES = {
   // Semantic fidelity domain (IR v1.5)
   UNKNOWN_MIDDLEWARE:  "ir:unknown_middleware",  // resolved name but unclassified — honest "don't know" instead of a guessed auth_gate
   GUARD_CLAUSE:        "ir:guard_clause",        // a call that can short-circuit execution via throw/abort based on a precondition
+  AUDIT_LOG:           "ir:audit_log",           // side-effect: a durable audit/activity-log record is created
 } as const
 
 export type IRNodeType = typeof IR_NODE_TYPES[keyof typeof IR_NODE_TYPES]

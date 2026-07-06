@@ -45,6 +45,13 @@ function guardRes(cache: ParseCache<unknown> | null, filePath: string, methodNam
   if (!cache) return detectGuardClause(filePath, methodName)
   return (cache as ParseCache<GuardRes>).compute(filePath, `guardClause::${methodName}`, () => detectGuardClause(filePath, methodName))
 }
+
+type AuditRes = ReturnType<typeof parseAuditLogCalls>
+
+function auditRes(cache: ParseCache<unknown> | null, filePath: string, auditSinks: string[]): AuditRes {
+  if (!cache) return parseAuditLogCalls(filePath, auditSinks)
+  return (cache as ParseCache<AuditRes>).compute(filePath, `auditLog::${auditSinks.join(",")}`, () => parseAuditLogCalls(filePath, auditSinks))
+}
 import { parseControllerMethod, parseFormRequestAuthorize, type ServiceCall, type ModelParam, type StandaloneDispatch, type NotificationDispatch } from "./controller-parser.js"
 import type { ListenerEntry } from "./event-listener-mapper.js"
 import { middlewareToNode } from "./middleware-mapper.js"
@@ -55,6 +62,7 @@ import { buildHierarchyEdges } from "./permission-extractor/hierarchy.js"
 import { parseTransactions } from "./transaction-parser.js"
 import { parseIsolation } from "./isolation-parser.js"
 import { detectGuardClause } from "./guard-clause-parser.js"
+import { parseAuditLogCalls } from "./audit-log-parser.js"
 import { DEFAULT_PROJECT_CONFIG, fqcnToPath, resolvePolicyFile } from "./project-config.js"
 import { parseApiResource, type NestedResourceRef } from "./resource-parser.js"
 import { ParseCache } from "./parse-cache.js"
@@ -309,6 +317,16 @@ export function augmentGraph(
     const isoConv  = { tenantSignals: config.conventions.tenantSignals, tenantContainerKeys: config.conventions.tenantContainerKeys }
     const isoResult = isoRes(cache, filePath, isoConv)
     addIsolationNodes(newNodes, newEdges, ctrlNodeForIso.id, isoResult)
+  }
+
+  // ---- Audit log pass (IR v1.5 Phase 5) --------------------------------
+  const ctrlNodeForAudit = graph.nodes.find((n) => n.type === IR_NODE_TYPES.BUSINESS_HANDLER)
+  if (ctrlNodeForAudit?.file && config.conventions.auditSinks.length > 0) {
+    const filePath = join(opts.projectRoot, ctrlNodeForAudit.file)
+    const auditCalls = auditRes(cache, filePath, config.conventions.auditSinks)
+    if (auditCalls.length > 0) {
+      addAuditLogNodes(newNodes, newEdges, ctrlNodeForAudit.id, auditCalls)
+    }
   }
 
   return { ...graph, nodes: newNodes, edges: newEdges, annotations: newAnnotations, framework: "laravel", ir_ver: IR_VERSION, adapter_ver: ADAPTER_VERSION }
@@ -592,6 +610,17 @@ function expandServiceCalls(
       budget.remaining -= isoResult.modelQueries.length
     } catch { /* skip */ }
 
+    // Audit-log pass inside service method (IR v1.5 Phase 5)
+    try {
+      if (config.conventions.auditSinks.length > 0) {
+        const auditCalls = auditRes(cache, filePath, config.conventions.auditSinks)
+        if (auditCalls.length > 0) {
+          addAuditLogNodes(nodes, edges, scNode.id, auditCalls)
+          budget.remaining -= auditCalls.length
+        }
+      }
+    } catch { /* skip */ }
+
     // Deeper service calls from this service method
     try {
       const l1 = ctrlL1(cache, filePath, methodName)
@@ -754,6 +783,38 @@ function addIsolationNodes(
         traceability: "semantic",
       })
     }
+  })
+}
+
+/**
+ * Add ir:audit_log nodes for calls matching a configured audit-sink symbol
+ * (e.g. Activity::add, activity()->log) — a durable audit trail that neither
+ * pipeline could otherwise tell apart from a generic service call
+ * (IR v1.5 Phase 5).
+ */
+function addAuditLogNodes(
+  nodes: ExecutionNode[],
+  edges: ExecutionEdge[],
+  callerNodeId: string,
+  calls: import("./audit-log-parser.js").AuditLogCall[]
+): void {
+  calls.forEach((call, idx) => {
+    const id = `audit_${callerNodeId}_${idx}`.replace(/[^a-z0-9_]/gi, "_")
+    if (nodes.some((n) => n.id === id)) return
+
+    nodes.push({
+      id,
+      type:   IR_NODE_TYPES.AUDIT_LOG,
+      symbol: call.symbol,
+      role:   "side_effect",
+      ...(call.args.length > 0 ? { args: call.args } : {}),
+    })
+    edges.push({
+      from:         callerNodeId,
+      to:           id,
+      relation:     "calls",
+      traceability: "static",
+    })
   })
 }
 

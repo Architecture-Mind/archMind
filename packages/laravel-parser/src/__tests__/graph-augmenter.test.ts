@@ -264,6 +264,44 @@ describe("augmentGraph — IR v1.5 Phase 4: guard clause / abort semantics", () 
   })
 })
 
+describe("augmentGraph — IR v1.5 Phase 5: audit / side-effect semantics", () => {
+  let augmented: IntermediateExecutionGraph
+
+  const SKELETON_USER_DESTROY: IntermediateExecutionGraph = {
+    entrypoint: "DELETE /users/{user}",
+    method: "DELETE", path: "/users/{user}",
+    nodes: [
+      {
+        id: "ctrl_usercontroller_destroy", type: "ir:business_handler",
+        symbol: "UserController::destroy", role: "handler",
+        file: "app/Http/Controllers/UserController.php",
+      },
+    ],
+    edges:       [],
+    annotations: [],
+  }
+
+  beforeAll(() => {
+    augmented = augmentGraph(SKELETON_USER_DESTROY, { projectRoot: FIXTURES })
+  })
+
+  test("classifies Activity::add as ir:audit_log, not ir:service_call", () => {
+    const audit = augmented.nodes.find((n) => n.symbol === "Activity::add")
+    expect(audit).toBeDefined()
+    expect(audit?.type).toBe("ir:audit_log")
+    expect(audit?.role).toBe("side_effect")
+  })
+
+  test("emits a calls edge from the controller to the audit_log node", () => {
+    const ctrl  = augmented.nodes.find((n) => n.type === "ir:business_handler")
+    const audit = augmented.nodes.find((n) => n.symbol === "Activity::add")
+    expect(ctrl).toBeDefined()
+    expect(audit).toBeDefined()
+    const edge = augmented.edges.find((e) => e.from === ctrl!.id && e.to === audit!.id && e.relation === "calls")
+    expect(edge).toBeDefined()
+  })
+})
+
 describe("augmentGraph — missing file field", () => {
   test("returns graph unchanged when controller has no file field", () => {
     const noFile: IntermediateExecutionGraph = {

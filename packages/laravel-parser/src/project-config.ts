@@ -18,6 +18,7 @@ export const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
       "whereOrganization", "whereOrganizationId",
     ],
     tenantContainerKeys: ["tenant", "organization"],
+    auditSinks: ["Activity::add", "activity()->log"],
   },
 }
 
@@ -50,6 +51,7 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig {
     conventions: {
       tenantSignals:      overrides.conventions?.tenantSignals      ?? inferred.conventions.tenantSignals,
       tenantContainerKeys: overrides.conventions?.tenantContainerKeys ?? inferred.conventions.tenantContainerKeys,
+      auditSinks:         overrides.conventions?.auditSinks         ?? inferred.conventions.auditSinks,
     },
   }
 }
