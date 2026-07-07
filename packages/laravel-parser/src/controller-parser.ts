@@ -64,6 +64,17 @@ export interface NotificationDispatch {
   callText:  string
 }
 
+export interface ConditionalBranch {
+  /** raw condition source text, e.g. "!empty($newOwnerId)" */
+  conditionText: string
+  /** request parameter name driving the condition, e.g. "migrate_ownership_id" */
+  paramName:     string
+  /** resolvable calls found in the "then" branch */
+  thenCalls:     ServiceCall[]
+  /** resolvable calls found in the "else" branch (empty if no else) */
+  elseCalls:     ServiceCall[]
+}
+
 export interface ControllerL1 {
   useMap:                  Map<string, string>
   formRequests:            FormRequestParam[]
@@ -74,6 +85,7 @@ export interface ControllerL1 {
   returnedResources:       ReturnedResource[]
   standaloneDispatches:    StandaloneDispatch[]
   standaloneNotifications: NotificationDispatch[]
+  conditionalBranches:     ConditionalBranch[]
   /** 1-indexed line of the method declaration; used for editor CodeLens anchoring */
   methodLine?:             number
 }
@@ -104,7 +116,7 @@ export function parseControllerMethod(
   const constructorMiddleware = gatherConstructorMiddleware(root)
 
   if (!methodNode) {
-    return { useMap, formRequests: [], authorizeCalls: [], serviceCalls: [], constructorMiddleware, modelParams: [], returnedResources: [], standaloneDispatches: [], standaloneNotifications: [] }
+    return { useMap, formRequests: [], authorizeCalls: [], serviceCalls: [], constructorMiddleware, modelParams: [], returnedResources: [], standaloneDispatches: [], standaloneNotifications: [], conditionalBranches: [] }
   }
 
   const injections = extractConstructorInjections(root, useMap)
@@ -119,6 +131,7 @@ export function parseControllerMethod(
   const returnedResources      = extractReturnedResources(methodNode, useMap)
   const standaloneDispatches   = extractStandaloneDispatches(methodNode, useMap)
   const standaloneNotifications = extractNotificationDispatches(methodNode, useMap)
+  const conditionalBranches    = extractConditionalBranches(methodNode, allInjections)
 
   // Depth-1 private method traversal: follow $this->helper() calls into the
   // same class, but do not recurse further to avoid graph blow-up.
@@ -142,16 +155,30 @@ export function parseControllerMethod(
     return true
   })
 
+  // Calls that live inside a detected conditional branch are only emitted
+  // there (scoped under the branch node) — the generic body-wide walk above
+  // also finds them, so exclude them here to avoid a duplicate unconditional
+  // node for a call that only executes in one branch (IR v1.5 Phase 6).
+  const branchOwnedKeys = new Set(
+    conditionalBranches
+      .flatMap((b) => [...b.thenCalls, ...b.elseCalls])
+      .map((sc) => `${sc.propertyName}::${sc.method}`)
+  )
+  const finalServiceCalls = uniqueServiceCalls.filter(
+    (sc) => !branchOwnedKeys.has(`${sc.propertyName}::${sc.method}`)
+  )
+
   return {
     useMap,
     formRequests,
     authorizeCalls,
-    serviceCalls: uniqueServiceCalls,
+    serviceCalls: finalServiceCalls,
     constructorMiddleware,
     modelParams,
     returnedResources,
     standaloneDispatches,
     standaloneNotifications,
+    conditionalBranches,
     methodLine: methodNode.startPosition.row + 1,  // 1-indexed
   }
 }
@@ -834,6 +861,95 @@ function extractStringCallArgs(argsNode: Parser.SyntaxNode): string[] {
       }
       return []
     })
+}
+
+// ---- Control-flow branch extraction (IR v1.5 Phase 6, narrow cut) -----
+//
+// Detects the specific pattern: a request parameter
+// ($request->input()/->has()/->boolean()) assigned to a variable, then that
+// variable driving an if/else whose branches call different, resolvable
+// service methods. Deliberately narrow — does not attempt general CFG/SSA
+// modeling (see the plan's "what this phase does not do").
+
+const REQUEST_INPUT_METHODS = new Set(["input", "has", "boolean"])
+
+function extractConditionalBranches(
+  methodNode: Parser.SyntaxNode,
+  injections: Map<string, string>
+): ConditionalBranch[] {
+  const body = methodNode.childForFieldName("body")
+  if (!body) return []
+
+  const requestParamVars = new Map<string, string>()
+  collectRequestParamVars(body, requestParamVars)
+  if (requestParamVars.size === 0) return []
+
+  const branches: ConditionalBranch[] = []
+  gatherConditionalBranches(body, requestParamVars, injections, branches)
+  return branches
+}
+
+// Finds `$var = $request->input('name', ...)` (or ->has()/->boolean()) and
+// records var name -> request parameter name.
+function collectRequestParamVars(node: Parser.SyntaxNode, out: Map<string, string>): void {
+  if (node.type === "assignment_expression") {
+    const left  = node.childForFieldName("left")
+    const right = node.childForFieldName("right")
+
+    if (left?.type === "variable_name" && right?.type === "member_call_expression") {
+      const objNode  = right.childForFieldName("object")
+      const nameNode = right.childForFieldName("name")
+
+      if (objNode?.type === "variable_name" && nameNode && REQUEST_INPUT_METHODS.has(nameNode.text)) {
+        const argsNode = right.childForFieldName("arguments")
+        const paramName = argsNode ? extractStringCallArgs(argsNode)[0] : undefined
+        if (paramName) {
+          out.set(left.text.replace(/^\$/, ""), paramName)
+        }
+      }
+    }
+  }
+
+  for (const child of node.children as Parser.SyntaxNode[]) {
+    collectRequestParamVars(child, out)
+  }
+}
+
+function gatherConditionalBranches(
+  node: Parser.SyntaxNode,
+  requestParamVars: Map<string, string>,
+  injections: Map<string, string>,
+  branches: ConditionalBranch[]
+): void {
+  if (node.type === "if_statement") {
+    const conditionNode = node.childForFieldName("condition")
+    const conditionText = stripOuterParens(conditionNode?.text ?? "")
+
+    const matchedVar = [...requestParamVars.keys()].find((v) => conditionText.includes(`$${v}`))
+
+    if (matchedVar) {
+      const paramName  = requestParamVars.get(matchedVar)!
+      const thenBody   = node.childForFieldName("body")
+      const altNode    = node.childForFieldName("alternative")
+      const elseBody   = altNode?.type === "else_clause" ? altNode.childForFieldName("body") : altNode
+
+      const thenCalls: ServiceCall[] = []
+      const elseCalls: ServiceCall[] = []
+      if (thenBody) gatherServiceCalls(thenBody, injections, thenCalls)
+      if (elseBody) gatherServiceCalls(elseBody, injections, elseCalls)
+
+      branches.push({ conditionText, paramName, thenCalls, elseCalls })
+    }
+  }
+
+  for (const child of node.children as Parser.SyntaxNode[]) {
+    gatherConditionalBranches(child, requestParamVars, injections, branches)
+  }
+}
+
+function stripOuterParens(text: string): string {
+  const m = text.match(/^\((.*)\)$/s)
+  return m ? m[1] : text
 }
 
 // ---- Notification + Mail dispatch extraction (18B.3) -----------------

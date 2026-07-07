@@ -190,6 +190,35 @@ describe("parseControllerMethod — mutation vs. reference (relationship-accesso
   })
 })
 
+// ---- IR v1.5 Phase 6: control-flow branch (narrow cut) -------------------
+
+describe("parseControllerMethod — conditional branch driven by a request parameter", () => {
+  test("detects the branch and its condition text", () => {
+    const result = parseControllerMethod(USER_CTRL, "migrateOwnership")
+    expect(result!.conditionalBranches).toHaveLength(1)
+    const branch = result!.conditionalBranches[0]!
+    expect(branch.conditionText).toBe("!empty($newOwnerId)")
+    expect(branch.paramName).toBe("migrate_ownership_id")
+  })
+
+  test("captures the then-branch call (reassignTasks)", () => {
+    const result = parseControllerMethod(USER_CTRL, "migrateOwnership")
+    const branch = result!.conditionalBranches[0]!
+    expect(branch.thenCalls.some((c) => c.serviceClass === "UserRepo" && c.method === "reassignTasks")).toBe(true)
+  })
+
+  test("captures the else-branch call (nullifyOwnership)", () => {
+    const result = parseControllerMethod(USER_CTRL, "migrateOwnership")
+    const branch = result!.conditionalBranches[0]!
+    expect(branch.elseCalls.some((c) => c.serviceClass === "UserRepo" && c.method === "nullifyOwnership")).toBe(true)
+  })
+
+  test("returns no conditional branches for a method with no request-param-driven if", () => {
+    const result = parseControllerMethod(USER_CTRL, "destroy")
+    expect(result!.conditionalBranches).toHaveLength(0)
+  })
+})
+
 // ---- extractUseMap -------------------------------------------------------
 
 describe("extractUseMap from controller file", () => {

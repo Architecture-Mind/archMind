@@ -225,6 +225,9 @@ export function augmentGraph(
         // Service calls from controller action
         const ctrlServiceNodes = addServiceCallNodes(newNodes, newEdges, ctrlNode.id, l1.serviceCalls, config.namespaces, opts.projectRoot, cache)
 
+        // Conditional branches driven by a request parameter (IR v1.5 Phase 6, narrow cut)
+        addConditionalBranchNodes(newNodes, newEdges, ctrlNode.id, l1.conditionalBranches, config.namespaces, opts.projectRoot, cache)
+
         // Service calls from policy methods
         const policyServiceNodes: ExecutionNode[] = []
         for (const policyNode of addedPolicyNodes) {
@@ -515,6 +518,54 @@ function addServiceCallNodes(
   })
 
   return created
+}
+
+/**
+ * Add ir:conditional_branch nodes for request-parameter-driven if/else found
+ * in the caller's method, plus the then/else calls as their own nodes with
+ * explicit ir:controls edges from the branch — "this call only executes in
+ * this branch" as a visible edge instead of an inference (IR v1.5 Phase 6,
+ * narrow cut: request-param-driven conditions only).
+ */
+function addConditionalBranchNodes(
+  nodes: ExecutionNode[],
+  edges: ExecutionEdge[],
+  callerNodeId: string,
+  branches: import("./controller-parser.js").ConditionalBranch[],
+  namespaces: Record<string, string>,
+  projectRoot: string,
+  cache: ParseCache<unknown> | null
+): void {
+  branches.forEach((branch, idx) => {
+    const id = `branch_${callerNodeId}_${idx}`.replace(/[^a-z0-9_]/gi, "_")
+    if (nodes.some((n) => n.id === id)) return
+
+    nodes.push({
+      id,
+      type:   IR_NODE_TYPES.CONDITIONAL_BRANCH,
+      symbol: branch.conditionText,
+      role:   "control_flow",
+      detail: branch.paramName,
+    })
+    edges.push({
+      from:         callerNodeId,
+      to:           id,
+      relation:     "calls",
+      traceability: "static",
+    })
+
+    const thenNodes = addServiceCallNodes(nodes, edges, id, branch.thenCalls, namespaces, projectRoot, cache)
+    const elseNodes = addServiceCallNodes(nodes, edges, id, branch.elseCalls, namespaces, projectRoot, cache)
+
+    for (const n of [...thenNodes, ...elseNodes]) {
+      edges.push({
+        from:         id,
+        to:           n.id,
+        relation:     IR_EDGE_RELATIONS.CONTROLS,
+        traceability: "semantic",
+      })
+    }
+  })
 }
 
 const MAX_SERVICE_DEPTH  = 3

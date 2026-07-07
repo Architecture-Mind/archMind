@@ -4,7 +4,7 @@
 //
 // Spec: research/semantic-ir/spec.md
 
-export const IR_VERSION = "1.9"
+export const IR_VERSION = "1.10"
 
 // ---------------------------------------------------------------------------
 // IR Node Types
@@ -53,6 +53,7 @@ export const IR_NODE_TYPES = {
   UNKNOWN_MIDDLEWARE:  "ir:unknown_middleware",  // resolved name but unclassified — honest "don't know" instead of a guessed auth_gate
   GUARD_CLAUSE:        "ir:guard_clause",        // a call that can short-circuit execution via throw/abort based on a precondition
   AUDIT_LOG:           "ir:audit_log",           // side-effect: a durable audit/activity-log record is created
+  CONDITIONAL_BRANCH:  "ir:conditional_branch",  // execution forks based on a named condition (narrow cut: request-param-driven only)
 } as const
 
 export type IRNodeType = typeof IR_NODE_TYPES[keyof typeof IR_NODE_TYPES]
@@ -75,6 +76,7 @@ export const IR_EDGE_RELATIONS = {
   RETURNS:           "ir:returns",
   DISPATCHES:        "ir:dispatches",
   SENDS:             "ir:sends",
+  CONTROLS:          "ir:controls",
 } as const
 
 export type IREdgeRelation = typeof IR_EDGE_RELATIONS[keyof typeof IR_EDGE_RELATIONS]

@@ -302,6 +302,49 @@ describe("augmentGraph — IR v1.5 Phase 5: audit / side-effect semantics", () =
   })
 })
 
+describe("augmentGraph — IR v1.5 Phase 6: control-flow branch (narrow cut)", () => {
+  let augmented: IntermediateExecutionGraph
+
+  const SKELETON_MIGRATE_OWNERSHIP: IntermediateExecutionGraph = {
+    entrypoint: "POST /users/{user}/migrate-ownership",
+    method: "POST", path: "/users/{user}/migrate-ownership",
+    nodes: [
+      {
+        id: "ctrl_usercontroller_migrateownership", type: "ir:business_handler",
+        symbol: "UserController::migrateOwnership", role: "handler",
+        file: "app/Http/Controllers/UserController.php",
+      },
+    ],
+    edges:       [],
+    annotations: [],
+  }
+
+  beforeAll(() => {
+    augmented = augmentGraph(SKELETON_MIGRATE_OWNERSHIP, { projectRoot: FIXTURES })
+  })
+
+  test("emits an ir:conditional_branch node with the condition text as symbol", () => {
+    const branch = augmented.nodes.find((n) => n.type === "ir:conditional_branch")
+    expect(branch).toBeDefined()
+    expect(branch?.symbol).toBe("!empty($newOwnerId)")
+    expect(branch?.detail).toBe("migrate_ownership_id")
+  })
+
+  test("emits ir:controls edges from the branch to both the then and else calls", () => {
+    const branch = augmented.nodes.find((n) => n.type === "ir:conditional_branch")
+    const thenNode = augmented.nodes.find((n) => n.symbol === "UserRepo::reassignTasks")
+    const elseNode = augmented.nodes.find((n) => n.symbol === "UserRepo::nullifyOwnership")
+    expect(branch).toBeDefined()
+    expect(thenNode).toBeDefined()
+    expect(elseNode).toBeDefined()
+
+    const controlsEdges = augmented.edges.filter((e) => e.relation === "ir:controls" && e.from === branch!.id)
+    const controlledIds = new Set(controlsEdges.map((e) => e.to))
+    expect(controlledIds.has(thenNode!.id)).toBe(true)
+    expect(controlledIds.has(elseNode!.id)).toBe(true)
+  })
+})
+
 describe("augmentGraph — missing file field", () => {
   test("returns graph unchanged when controller has no file field", () => {
     const noFile: IntermediateExecutionGraph = {
