@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-08
+
+### Added
+- **IR v1.5 — Semantic Fidelity** (`@kidkender/archmind-protocol` 0.5.0, `@kidkender/archmind-laravel-parser` 0.5.0): closes the gaps identified in `research/semantic-ir/v1.5-semantic-fidelity-plan.md`, all regression-checked against real koel/BookStack/InvoiceNinja/Monica/Akaunting source, not just unit fixtures:
+  - Middleware group wrapping resolved to concrete FQCNs from `RouteServiceProvider.php`/`Kernel.php`, instead of falling back to bare group names.
+  - Mutation chains folded into service-call nodes, exposed via a new `ExecutionNode.mutates` flag.
+  - Transaction containment made explicit via a new `ir:wraps` edge relation — a mutating call with no `ir:wraps` edge now renders as a positive, visible "NOT wrapped in a transaction" statement instead of something the LLM has to infer.
+  - Guard clauses (`if (...) throw/abort`) and the calls they protect are classified as `ir:guard_clause`.
+  - Audit/activity-log sinks (`Activity::add`, `activity()->log`, configurable via `conventions.auditSinks`) classified as `ir:audit_log` instead of a generic service call.
+  - Control-flow forks driven by request parameters are emitted as `ir:conditional_branch` nodes, carrying the driving param name in `node.detail`.
+  - Relative sub-namespace controller resolution and RouteServiceProvider-level `->namespace($this->namespace)` wrapping — fixes Akaunting's `Route::resource('invoices', 'Sales\Invoices', ...)` pattern, previously mis-resolved as an already-complete FQCN. Also broadens RouteServiceProvider discovery to custom-named providers (e.g. `app/Providers/Route.php`).
+- Laravel: standalone Bus/Action dispatch detection — `Bus::dispatch()`, `ClassName::dispatch()/dispatchSync()/dispatchNow()`, and the `laravel-actions` `Action::run()` pattern are now recognized as job/event dispatches, not just constructor-injected service calls.
+- Laravel: method-scoped parsing applied consistently across isolation/transaction/audit-log parsing, fixing a file-wide contamination bug where one method's writes/queries leaked into a sibling method's graph.
+- New `queue-job-parser.ts` and `schedule-parser.ts` — queued job dispatch and console `Schedule::command()`/`Schedule::call()` extraction as first-class entrypoints.
+- `serialize-graph` (`@kidkender/archmind-prompt-builder` 0.2.0): renders `[MUTATES]`, `node.detail`, and a new "Unwrapped mutations" summary section reflecting the new IR v1.5 node/edge types.
+
+### Fixed
+- All three bugs found via blind-testing archMind against real repos outside the benchmark suite (InvoiceNinja, Monica, Akaunting): method-scoped isolation analysis no longer leaks a sibling method's writes/queries into the current method's graph; CQRS-style static dispatch (`ClassName::dispatchSync()`) is now detected; and relative sub-namespace controller strings resolve against the enclosing namespace instead of being treated as already-complete FQCNs.
+
 ## [0.6.0] - 2026-07-04
 
 ### Added
