@@ -214,3 +214,48 @@ class RouteServiceProvider {
     expect(result.routeWrapping.size).toBe(0)
   })
 })
+
+// ---- resolveAliasMap — RouteServiceProvider namespace wrapping (IR v1.5 Phase 7) ------
+
+describe("resolveAliasMap — RouteServiceProvider namespace wrapping (Akaunting Route.php pattern)", () => {
+  test("discovers a custom-named provider (not literally RouteServiceProvider.php) that extends RouteServiceProvider, and resolves ->namespace($this->namespace)", () => {
+    const root = makeDir("rsp_akaunting")
+    mkdirSync(join(root, "app", "Http"), { recursive: true })
+    writeFileSync(join(root, "app", "Http", "Kernel.php"), "<?php", "utf-8")
+    mkdirSync(join(root, "app", "Providers"), { recursive: true })
+    // Named "Route.php", not "RouteServiceProvider.php" — mirrors Akaunting's
+    // app/Providers/Route.php, discovered by class content (extends the framework's
+    // RouteServiceProvider), not by the standard filename.
+    writeFileSync(
+      join(root, "app", "Providers", "Route.php"),
+      `<?php
+namespace App\\Providers;
+use Illuminate\\Support\\Facades\\Route as Facade;
+use Illuminate\\Foundation\\Support\\Providers\\RouteServiceProvider as Provider;
+class Route extends Provider {
+    protected $namespace = 'App\\Http\\Controllers';
+    public function map() {
+        Facade::prefix('{company_id}')
+            ->middleware('admin')
+            ->namespace($this->namespace)
+            ->group(base_path('routes/admin.php'));
+    }
+}`,
+      "utf-8"
+    )
+    makeFile("rsp_akaunting", "routes", "admin.php")
+
+    const result = resolveAliasMap(root, DEFAULT_PROJECT_CONFIG)
+    expect(result.routeNamespaceWrapping.get("routes/admin.php")).toBe("App\\Http\\Controllers")
+  })
+
+  test("returns an empty routeNamespaceWrapping when no RouteServiceProvider-like file exists", () => {
+    const root = makeDir("rsp_namespace_absent")
+    mkdirSync(join(root, "app", "Http"), { recursive: true })
+    writeFileSync(join(root, "app", "Http", "Kernel.php"), "<?php", "utf-8")
+    makeFile("rsp_namespace_absent", "routes", "api.php")
+
+    const result = resolveAliasMap(root, DEFAULT_PROJECT_CONFIG)
+    expect(result.routeNamespaceWrapping.size).toBe(0)
+  })
+})

@@ -3,7 +3,7 @@ import { join, relative, dirname, basename } from "path"
 import type { ProjectConfig } from "@kidkender/archmind-protocol"
 import { parseKernel, parseMiddlewareGroups, type AliasMap } from "./kernel-parser.js"
 import { parseBootstrap } from "./bootstrap-parser.js"
-import { parseRouteServiceProvider } from "./route-service-provider-parser.js"
+import { parseRouteServiceProvider, parseRouteServiceProviderNamespaces } from "./route-service-provider-parser.js"
 
 export const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   routeFiles: ["routes/api.php"],
@@ -324,6 +324,13 @@ export interface ResolvedAliases {
    * projects with no RouteServiceProvider.
    */
   routeWrapping: Map<string, string[]>
+  /**
+   * Route file path (relative to projectRoot) → default controller namespace from an outer
+   * ->namespace($this->namespace)->group() in RouteServiceProvider.php (Laravel <=10, e.g.
+   * Akaunting's app/Providers/Route.php). Empty for Laravel 11+ projects and for projects
+   * whose provider declares no such wrapping.
+   */
+  routeNamespaceWrapping: Map<string, string>
 }
 
 /**
@@ -346,6 +353,7 @@ export function resolveAliasMap(projectRoot: string, config: ProjectConfig): Res
       aliasMap: parseKernel(kernelPath),
       routeFiles: flattenRouteIncludes(projectRoot, expanded),
       routeWrapping: resolveRouteServiceProviderWrapping(projectRoot, kernelPath),
+      routeNamespaceWrapping: resolveRouteServiceProviderNamespaceWrapping(projectRoot),
     }
   }
 
@@ -365,12 +373,18 @@ export function resolveAliasMap(projectRoot: string, config: ProjectConfig): Res
       aliasMap,
       routeFiles: flattenRouteIncludes(projectRoot, expanded),
       routeWrapping: new Map(), // bootstrap/app.php has no RouteServiceProvider group-wrapping pattern
+      routeNamespaceWrapping: new Map(),
     }
   }
 
   // Unknown structure — expand patterns from config, no aliases
   const expanded = expandRouteFiles(projectRoot, config.routeFiles)
-  return { aliasMap: {}, routeFiles: flattenRouteIncludes(projectRoot, expanded), routeWrapping: new Map() }
+  return {
+    aliasMap: {},
+    routeFiles: flattenRouteIncludes(projectRoot, expanded),
+    routeWrapping: new Map(),
+    routeNamespaceWrapping: new Map(),
+  }
 }
 
 /**
@@ -381,6 +395,12 @@ export function resolveAliasMap(projectRoot: string, config: ProjectConfig): Res
  * app/App/Providers/RouteServiceProvider.php, found via real-repo regression
  * check — the hardcoded standard path silently missed it and every BookStack
  * API route lost its middleware resolution as a result — IR v1.5 Phase 1 fix).
+ *
+ * Falls back further to any app/Providers/*.php file whose class extends the
+ * framework's RouteServiceProvider under a custom name — e.g. Akaunting's
+ * app/Providers/Route.php (found via real-repo blind test: the route-namespace
+ * wrapping it declares was invisible because discovery only matched the exact
+ * filename "RouteServiceProvider.php" — IR v1.5 Phase 7).
  */
 function findRouteServiceProviderPath(projectRoot: string): string | null {
   const standardPath = join(projectRoot, "app", "Providers", "RouteServiceProvider.php")
@@ -391,7 +411,25 @@ function findRouteServiceProviderPath(projectRoot: string): string | null {
 
   const candidates: string[] = []
   walkDir(appDir, ".php", candidates)
-  return candidates.find((abs) => basename(abs) === "RouteServiceProvider.php") ?? null
+  const byName = candidates.find((abs) => basename(abs) === "RouteServiceProvider.php")
+  if (byName) return byName
+
+  const providersDir = join(appDir, "Providers")
+  if (!existsSync(providersDir)) return null
+  const providerFiles: string[] = []
+  walkDir(providersDir, ".php", providerFiles)
+  return providerFiles.find((abs) => extendsRouteServiceProvider(abs)) ?? null
+}
+
+/** True when the file's `use ... RouteServiceProvider [as X];` imports the framework base class. */
+function extendsRouteServiceProvider(absPath: string): boolean {
+  let source: string
+  try {
+    source = readFileSync(absPath, "utf-8")
+  } catch {
+    return false
+  }
+  return /\\RouteServiceProvider(\s+as\s+\w+)?\s*;/.test(source)
 }
 
 /**
@@ -412,6 +450,16 @@ function resolveRouteServiceProviderWrapping(projectRoot: string, kernelPath: st
     resolved.set(file, entries)
   }
   return resolved
+}
+
+/**
+ * Resolve RouteServiceProvider.php's (or an equivalent custom-named provider's)
+ * ->namespace(...) wrapping (if present) into a default controller namespace per route file.
+ */
+function resolveRouteServiceProviderNamespaceWrapping(projectRoot: string): Map<string, string> {
+  const rspPath = findRouteServiceProviderPath(projectRoot)
+  if (!rspPath) return new Map()
+  return parseRouteServiceProviderNamespaces(rspPath, projectRoot)
 }
 
 /** Returns true when .archmind.json exists AND explicitly declares routeFiles. */

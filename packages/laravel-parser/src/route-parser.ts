@@ -29,6 +29,12 @@ export interface ParseOptions {
   // RouteServiceProvider.php (Laravel <=10) — resolved to concrete FQCNs where
   // possible. Seeds the middleware stack before the file's own groups are walked.
   wrappingMiddleware?: string[]
+  // Default controller namespace wrapping this entire file from an outer
+  // ->namespace($this->namespace)->group(...) in RouteServiceProvider.php (classic
+  // Laravel <=10, e.g. Akaunting's app/Providers/Route.php). Seeds ctx.namespace
+  // before the file's own Route::namespace() groups are walked, which still
+  // override it for routes registered inside them.
+  wrappingNamespace?: string
 }
 
 export function parseRouteFile(
@@ -36,7 +42,7 @@ export function parseRouteFile(
   opts: ParseOptions = {}
 ): IntermediateExecutionGraph[] {
   const out: IntermediateExecutionGraph[] = []
-  processFile(filePath, { middleware: [...(opts.wrappingMiddleware ?? [])], prefix: "", namespace: "" }, out, opts)
+  processFile(filePath, { middleware: [...(opts.wrappingMiddleware ?? [])], prefix: "", namespace: opts.wrappingNamespace ?? "" }, out, opts)
   return out
 }
 
@@ -312,13 +318,23 @@ function buildGraph(
   // For Laravel ≤8 string routes ('Controller@method'), useMap is typically empty since
   // web.php has no use statements. Fall back to the group's Route::namespace() (module
   // packages like nwidart/laravel-modules), or the conventional App\Http\Controllers\.
+  //
+  // A leading `\` is the only reliable "already fully-qualified" signal in PHP — it means
+  // resolution starts at the global namespace root. A controller string that merely
+  // *contains* a backslash (e.g. Akaunting's `'Sales\Invoices'`) is a RELATIVE sub-namespace,
+  // resolved against the enclosing group's namespace — not a complete FQCN. Treating any
+  // backslash as "already complete" silently dropped the group namespace for this pattern
+  // (found via real-repo blind test on Akaunting's classic RouteServiceProvider-namespaced
+  // routes).
   const fqcnFromMap = useMap.get(controller)
   const fqcn = fqcnFromMap
-    ?? (controller.includes("\\")
-      ? controller
+    ?? (controller.startsWith("\\")
+      ? controller.slice(1)
       : routeNamespace
         ? `${routeNamespace}\\${controller}`
-        : `App\\Http\\Controllers\\${controller}`)
+        : controller.includes("\\")
+          ? controller
+          : `App\\Http\\Controllers\\${controller}`)
   const file = fqcn.includes("\\")
     ? (opts.namespaces ? fqcnToPath(fqcn, opts.namespaces) ?? undefined : fqcn.replace(/^App\\/, "app/").replace(/\\/g, "/") + ".php")
     : undefined

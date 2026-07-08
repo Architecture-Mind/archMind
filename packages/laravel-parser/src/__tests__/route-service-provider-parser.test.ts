@@ -1,6 +1,6 @@
 import { join, dirname } from "path"
 import { fileURLToPath } from "url"
-import { parseRouteServiceProvider } from "../route-service-provider-parser.js"
+import { parseRouteServiceProvider, parseRouteServiceProviderNamespaces } from "../route-service-provider-parser.js"
 import { parseMiddlewareGroups } from "../kernel-parser.js"
 import { parseRouteFile } from "../route-parser.js"
 
@@ -24,6 +24,30 @@ describe("parseRouteServiceProvider", () => {
   test("returns empty map for missing file", () => {
     const wrapping = parseRouteServiceProvider("/nonexistent/RouteServiceProvider.php", FIXTURES)
     expect(wrapping.size).toBe(0)
+  })
+})
+
+describe("parseRouteServiceProviderNamespaces — Akaunting Route.php pattern (IR v1.5 Phase 7)", () => {
+  const RSP = join(FIXTURES, "app/Providers/NamespacedRouteServiceProvider.php")
+
+  test("resolves ->namespace($this->namespace) from the class-level property declaration", () => {
+    const namespaces = parseRouteServiceProviderNamespaces(RSP, FIXTURES)
+    expect(namespaces.get("routes/admin.php")).toBe("App\\Http\\Controllers")
+  })
+
+  test("resolves a literal-string ->namespace(...) fluent call", () => {
+    const namespaces = parseRouteServiceProviderNamespaces(RSP, FIXTURES)
+    expect(namespaces.get("routes/api.php")).toBe("App\\Http\\Controllers\\Api")
+  })
+
+  test("resolves an options-array ['namespace' => ...] form", () => {
+    const namespaces = parseRouteServiceProviderNamespaces(RSP, FIXTURES)
+    expect(namespaces.get("routes/web.php")).toBe("App\\Http\\Controllers\\Web")
+  })
+
+  test("returns empty map for missing file", () => {
+    const namespaces = parseRouteServiceProviderNamespaces("/nonexistent/Route.php", FIXTURES)
+    expect(namespaces.size).toBe(0)
   })
 })
 

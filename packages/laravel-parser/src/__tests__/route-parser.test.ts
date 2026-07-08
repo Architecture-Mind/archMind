@@ -118,14 +118,20 @@ describe("parseRouteFile — Route::namespace() groups", () => {
     graphs = parseRouteFile(fixture("routes-namespace.php"))
   })
 
-  test("extracts 3 routes", () => {
-    expect(graphs).toHaveLength(3)
+  test("extracts 4 routes", () => {
+    expect(graphs).toHaveLength(4)
   })
 
   test("bare controller under Route::namespace() (fluent form) resolves to the group's namespace, not App\\Http\\Controllers", () => {
     const g = graphs.find((g) => g.path === "/invoices")!
     expect(g.nodes[0].symbol).toBe("InvoiceController::index")
     expect(g.nodes[0].file).toBe("Modules/Accounting/Http/Controllers/InvoiceController.php")
+  })
+
+  test("relative sub-namespace controller string (Akaunting's Sales\\Invoices pattern) resolves relative to the group namespace, not as an already-complete FQCN", () => {
+    const g = graphs.find((g) => g.path === "/invoices/sent")!
+    expect(g.nodes[0].symbol).toBe("Sales\\Invoices::markSent")
+    expect(g.nodes[0].file).toBe("Modules/Accounting/Http/Controllers/Sales/Invoices.php")
   })
 
   test("bare controller under Route::group(['namespace' => ...]) (options-array form) resolves correctly", () => {
@@ -138,6 +144,27 @@ describe("parseRouteFile — Route::namespace() groups", () => {
     const g = graphs.find((g) => g.path === "/health")!
     expect(g.nodes[0].symbol).toBe("HealthController::check")
     expect(g.nodes[0].file).toBe("app/Http/Controllers/HealthController.php")
+  })
+})
+
+describe("parseRouteFile — opts.wrappingNamespace (RouteServiceProvider-level default)", () => {
+  test("seeds the outer namespace for a relative sub-namespace controller string (Akaunting's Sales\\Invoices pattern)", () => {
+    const graphs = parseRouteFile(fixture("routes-simple.php"), { wrappingNamespace: "App\\Http\\Controllers" })
+    const g = graphs.find((g) => g.method === "POST" && g.path === "/tasks")!
+    expect(g.nodes[0].symbol).toBe("TaskController::store")
+  })
+
+  test("an inner Route::namespace() group overrides the outer wrappingNamespace", () => {
+    const graphs = parseRouteFile(fixture("routes-namespace.php"), { wrappingNamespace: "App\\Http\\Controllers" })
+    const g = graphs.find((g) => g.path === "/invoices")!
+    expect(g.nodes[0].file).toBe("Modules/Accounting/Http/Controllers/InvoiceController.php")
+  })
+
+  test("a route with no inner namespace group falls back to wrappingNamespace instead of App\\Http\\Controllers", () => {
+    const graphs = parseRouteFile(fixture("routes-namespace.php"), { wrappingNamespace: "Custom\\Base" })
+    const g = graphs.find((g) => g.path === "/health")!
+    expect(g.nodes[0].symbol).toBe("HealthController::check")
+    expect(g.nodes[0].file).toBe("Custom/Base/HealthController.php")
   })
 })
 

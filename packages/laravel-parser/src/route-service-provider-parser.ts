@@ -11,6 +11,10 @@ _parser.setLanguage((PHP as { php?: unknown }).php ?? PHP)
 // class strings from the Route::group([...], fn () => require(...)) that wraps it.
 export type RouteWrappingMap = Map<string, string[]>
 
+// route file path (relative to projectRoot, POSIX-style) → the single namespace that
+// wraps it, from ->namespace(...) (fluent or ['namespace' => ...] options-array form).
+export type RouteNamespaceMap = Map<string, string>
+
 /**
  * Parse a Laravel <=10 app/Providers/RouteServiceProvider.php for
  * Route::group(['middleware' => X, ...], fn () => require base_path(Y)) — and the
@@ -20,30 +24,77 @@ export type RouteWrappingMap = Map<string, string[]>
  * Returns an empty map if the file cannot be read or no such pattern is found.
  */
 export function parseRouteServiceProvider(filePath: string, projectRoot: string): RouteWrappingMap {
-  const out: RouteWrappingMap = new Map()
+  return parseProvider(filePath, projectRoot).middleware
+}
+
+/**
+ * Parse the same provider for ->namespace(...) wrapping instead of middleware —
+ * covers classic Laravel's `protected $namespace = 'App\Http\Controllers';` +
+ * `->namespace($this->namespace)->group(...)` pattern (found via real-repo blind
+ * test on Akaunting's app/Providers/Route.php, a custom-named RouteServiceProvider
+ * subclass), plus literal-string and options-array ['namespace' => ...] forms.
+ *
+ * Returns an empty map if the file cannot be read or no such pattern is found.
+ */
+export function parseRouteServiceProviderNamespaces(filePath: string, projectRoot: string): RouteNamespaceMap {
+  return parseProvider(filePath, projectRoot).namespace
+}
+
+// ---- Internals -------------------------------------------------------
+
+function parseProvider(
+  filePath: string,
+  projectRoot: string
+): { middleware: RouteWrappingMap; namespace: RouteNamespaceMap } {
+  const middleware: RouteWrappingMap = new Map()
+  const namespace: RouteNamespaceMap = new Map()
   let source: string
   let tree: ReturnType<typeof _parser.parse>
   try {
     source = readFileSync(filePath, "utf-8")
     tree = _parser.parse(source)
   } catch {
-    return out
+    return { middleware, namespace }
   }
-  walk(tree.rootNode, filePath, projectRoot, out)
-  return out
+  const classNamespaceProperty = findClassNamespaceProperty(tree.rootNode)
+  walk(tree.rootNode, filePath, projectRoot, middleware, namespace, classNamespaceProperty)
+  return { middleware, namespace }
 }
 
-// ---- Internals -------------------------------------------------------
+/** Find `protected/public/private $namespace = '...';` declared directly in the class body. */
+function findClassNamespaceProperty(root: Parser.SyntaxNode): string | null {
+  let found: string | null = null
+  const visit = (node: Parser.SyntaxNode): void => {
+    if (found) return
+    if (node.type === "property_element") {
+      const nameNode = node.children.find((c) => c.type === "variable_name")
+      if (nameNode?.text === "$namespace") {
+        const valueNode = node.children.find((c) => c.type === "string" || c.type === "encapsed_string")
+        if (valueNode) found = resolveValue(valueNode)[0] ?? null
+      }
+    }
+    for (const child of node.children) visit(child)
+  }
+  visit(root)
+  return found
+}
 
-function walk(node: Parser.SyntaxNode, providerFile: string, projectRoot: string, out: RouteWrappingMap): void {
+function walk(
+  node: Parser.SyntaxNode,
+  providerFile: string,
+  projectRoot: string,
+  middlewareOut: RouteWrappingMap,
+  namespaceOut: RouteNamespaceMap,
+  classNamespaceProperty: string | null
+): void {
   if (node.type === "member_call_expression" || node.type === "scoped_call_expression") {
     const nameNode = node.childForFieldName("name")
     if (nameNode?.text === "group") {
-      handleGroupCall(node, providerFile, projectRoot, out)
+      handleGroupCall(node, providerFile, projectRoot, middlewareOut, namespaceOut, classNamespaceProperty)
     }
   }
   for (const child of node.children) {
-    walk(child, providerFile, projectRoot, out)
+    walk(child, providerFile, projectRoot, middlewareOut, namespaceOut, classNamespaceProperty)
   }
 }
 
@@ -51,35 +102,45 @@ function handleGroupCall(
   node: Parser.SyntaxNode,
   providerFile: string,
   projectRoot: string,
-  out: RouteWrappingMap
+  middlewareOut: RouteWrappingMap,
+  namespaceOut: RouteNamespaceMap,
+  classNamespaceProperty: string | null
 ): void {
   const argsNode = node.childForFieldName("arguments")
   if (!argsNode) return
   const args = getArgNodes(argsNode)
 
   const middleware: string[] = []
+  let namespaceValue: string | null = null
 
-  // Fluent form: Route::middleware('api')->prefix('v1')->group(fn)
+  // Fluent form: Route::middleware('api')->namespace(...)->prefix('v1')->group(fn)
   const objectNode = node.childForFieldName("object")
-  if (objectNode) collectFluentMiddleware(objectNode, middleware)
+  if (objectNode) {
+    collectFluentMiddleware(objectNode, middleware)
+    namespaceValue = collectFluentNamespace(objectNode, classNamespaceProperty)
+  }
 
   let closureNode: Parser.SyntaxNode | undefined = args[0]
 
-  // Options form: Route::group(['middleware' => X, ...], fn)
+  // Options form: Route::group(['middleware' => X, 'namespace' => Y, ...], fn)
   if (args[0]?.type === "array_creation_expression") {
     extractMiddlewareFromOptions(args[0], middleware)
+    namespaceValue = extractNamespaceFromOptions(args[0]) ?? namespaceValue
     closureNode = args[1]
   }
 
-  if (!closureNode || middleware.length === 0) return
+  if (!closureNode || (middleware.length === 0 && !namespaceValue)) return
 
   // Laravel's Router::group() also accepts a route-file path directly instead of a
   // closure — the common Laravel <=8 skeleton form:
   //   Route::middleware('web')->group(base_path('routes/web.php'));
   const directPath = resolveRequirePath(closureNode, providerFile, projectRoot)
   if (directPath) {
-    const existing = out.get(directPath) ?? []
-    out.set(directPath, Array.from(new Set([...existing, ...middleware])))
+    if (middleware.length > 0) {
+      const existing = middlewareOut.get(directPath) ?? []
+      middlewareOut.set(directPath, Array.from(new Set([...existing, ...middleware])))
+    }
+    if (namespaceValue) namespaceOut.set(directPath, namespaceValue)
     return
   }
 
@@ -87,9 +148,55 @@ function handleGroupCall(
   if (!body) return
 
   collectRequiredFiles(body, providerFile, projectRoot, (relFile) => {
-    const existing = out.get(relFile) ?? []
-    out.set(relFile, Array.from(new Set([...existing, ...middleware])))
+    if (middleware.length > 0) {
+      const existing = middlewareOut.get(relFile) ?? []
+      middlewareOut.set(relFile, Array.from(new Set([...existing, ...middleware])))
+    }
+    if (namespaceValue) namespaceOut.set(relFile, namespaceValue)
   })
+}
+
+/** Walk a fluent method chain for a `->namespace(...)` call, resolving `$this->namespace`
+ *  against the class's own property declaration when the arg isn't a literal string. */
+function collectFluentNamespace(node: Parser.SyntaxNode, classNamespaceProperty: string | null): string | null {
+  let cur: Parser.SyntaxNode | null = node
+  while (cur) {
+    if (cur.type === "member_call_expression" || cur.type === "scoped_call_expression") {
+      const nameNode = cur.childForFieldName("name")
+      if (nameNode?.text === "namespace") {
+        const argsNode = cur.childForFieldName("arguments")
+        const arg = argsNode ? getArgNodes(argsNode)[0] : undefined
+        if (arg) {
+          if (arg.type === "member_access_expression") {
+            const objText = arg.childForFieldName("object")?.text
+            const propText = arg.childForFieldName("name")?.text
+            if (objText === "$this" && propText === "namespace") return classNamespaceProperty
+          } else {
+            return resolveValue(arg)[0] ?? null
+          }
+        }
+      }
+      cur = cur.type === "scoped_call_expression" ? null : (cur.childForFieldName("object") ?? null)
+    } else {
+      cur = null
+    }
+  }
+  return null
+}
+
+function extractNamespaceFromOptions(optionsNode: Parser.SyntaxNode): string | null {
+  for (const child of optionsNode.children) {
+    if (child.type !== "array_element_initializer") continue
+    const named = child.namedChildren
+    if (named.length < 2) continue
+    const key = named[0]?.type === "string"
+      ? (named[0].children.find((c) => c.type === "string_content")?.text ?? "")
+      : named[0]?.text ?? ""
+    if (key !== "namespace") continue
+    const value = named[1]
+    if (value) return resolveValue(value)[0] ?? null
+  }
+  return null
 }
 
 function collectFluentMiddleware(node: Parser.SyntaxNode, out: string[]): void {

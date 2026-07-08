@@ -13,7 +13,12 @@ export {
 } from "./controller-parser.js"
 export { augmentGraph, fqcnToRelativePath, type AugmentOptions, type ExpansionFocus } from "./graph-augmenter.js"
 export { parseKernel, parseMiddlewareGroups, type AliasMap, type MiddlewareGroupMap } from "./kernel-parser.js"
-export { parseRouteServiceProvider, type RouteWrappingMap } from "./route-service-provider-parser.js"
+export {
+  parseRouteServiceProvider,
+  parseRouteServiceProviderNamespaces,
+  type RouteWrappingMap,
+  type RouteNamespaceMap,
+} from "./route-service-provider-parser.js"
 export { parseSchedule, type ScheduledEntry } from "./schedule-parser.js"
 export { parseQueuedJob, parseQueuedJobs } from "./queue-job-parser.js"
 export { loadProjectConfig, inferProjectConfig, DEFAULT_PROJECT_CONFIG, fqcnToPath, resolveAliasMap, expandRouteFiles, expandRouteGlob, flattenRouteIncludes, resolvePolicyFile } from "./project-config.js"
