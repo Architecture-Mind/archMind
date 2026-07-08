@@ -4,10 +4,12 @@ export { middlewareToNode, resolvedMiddlewareToNode } from "./middleware-mapper.
 export {
   parseControllerMethod,
   extractUseMap,
+  detectParamDrivenBranch,
   type FormRequestParam,
   type AuthorizeCall,
   type ControllerL1,
   type ConditionalBranch,
+  type SelfGuardCall,
 } from "./controller-parser.js"
 export { augmentGraph, fqcnToRelativePath, type AugmentOptions, type ExpansionFocus } from "./graph-augmenter.js"
 export { parseKernel, parseMiddlewareGroups, type AliasMap, type MiddlewareGroupMap } from "./kernel-parser.js"

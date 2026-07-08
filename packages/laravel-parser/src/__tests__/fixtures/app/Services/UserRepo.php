@@ -4,9 +4,14 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Exceptions\NotifyException;
+use App\Services\OwnershipTransferrer;
 
 class UserRepo
 {
+    public function __construct(
+        private OwnershipTransferrer $ownership,
+    ) {}
+
     public function destroy(User $user): void
     {
         $this->ensureDeletable($user);
@@ -46,6 +51,20 @@ class UserRepo
                 throw new \RuntimeException('deep throw, not a guard');
             }
             $count++;
+        }
+    }
+
+    // Real BookStack shape: the caller (UserController::deleteWithTransfer)
+    // reads the request param and passes it as an argument here — the
+    // if/else branches on THIS method's own parameter, not on a
+    // $request->input() call this method never makes (IR v1.5 Phase 6,
+    // cross-method extension).
+    public function destroyAndTransfer(User $user, ?int $transferToId = null): void
+    {
+        if (!empty($transferToId)) {
+            $this->ownership->reassignTasks($user, $transferToId);
+        } else {
+            $this->ownership->nullifyOwnership($user);
         }
     }
 }

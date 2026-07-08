@@ -1,7 +1,7 @@
 import { join, dirname } from "path"
 import { fileURLToPath } from "url"
 import { readFileSync } from "fs"
-import { parseControllerMethod, extractUseMap } from "../controller-parser.js"
+import { parseControllerMethod, extractUseMap, detectParamDrivenBranch } from "../controller-parser.js"
 import Parser from "tree-sitter"
 // @ts-ignore
 import PHP from "tree-sitter-php"
@@ -12,6 +12,7 @@ const __dirname  = dirname(__filename)
 const FIXTURES = join(__dirname, "fixtures")
 const TASK_CTRL = join(FIXTURES, "app/Modules/Task/Http/Controllers/TaskController.php")
 const USER_CTRL = join(FIXTURES, "app/Http/Controllers/UserController.php")
+const USER_REPO = join(FIXTURES, "app/Services/UserRepo.php")
 
 // ---- parseControllerMethod -----------------------------------------------
 
@@ -219,6 +220,54 @@ describe("parseControllerMethod — conditional branch driven by a request param
   })
 })
 
+// ---- IR v1.5 Phase 6, cross-method extension ------------------------------
+// Real-repo regression check (BookStack UserApiController::delete ->
+// UserRepo::destroy) found the same-method-only detection above misses the
+// actual shape: the controller reads the request param and hands it to a
+// directly-called service method as an argument; the if/else lives inside
+// the callee, keyed on ITS OWN parameter, not on a $request->input() call.
+
+describe("parseControllerMethod — tags a call argument sourced from a request param", () => {
+  test("flags the requestParamArg on the service call that received it", () => {
+    const result = parseControllerMethod(USER_CTRL, "deleteWithTransfer")
+    const call = result!.serviceCalls.find(
+      (c) => c.serviceClass === "UserRepo" && c.method === "destroyAndTransfer"
+    )
+    expect(call).toBeDefined()
+    expect(call!.requestParamArg).toEqual({ position: 1, requestParamName: "transfer_to_id" })
+  })
+
+  test("does not flag calls whose arguments are not request-derived", () => {
+    const result = parseControllerMethod(USER_CTRL, "destroy")
+    for (const call of result!.serviceCalls) {
+      expect(call.requestParamArg).toBeUndefined()
+    }
+  })
+})
+
+describe("detectParamDrivenBranch — follows the request param one hop into the callee", () => {
+  test("finds the branch keyed on the callee's own parameter", () => {
+    const branch = detectParamDrivenBranch(USER_REPO, "destroyAndTransfer", 1, "transfer_to_id")
+    expect(branch).not.toBeNull()
+    expect(branch!.conditionText).toBe("!empty($transferToId)")
+    expect(branch!.paramName).toBe("transfer_to_id")
+  })
+
+  test("captures the then/else calls inside the callee", () => {
+    const branch = detectParamDrivenBranch(USER_REPO, "destroyAndTransfer", 1, "transfer_to_id")
+    expect(branch!.thenCalls.some((c) => c.serviceClass === "OwnershipTransferrer" && c.method === "reassignTasks")).toBe(true)
+    expect(branch!.elseCalls.some((c) => c.serviceClass === "OwnershipTransferrer" && c.method === "nullifyOwnership")).toBe(true)
+  })
+
+  test("returns null when the callee method doesn't exist", () => {
+    expect(detectParamDrivenBranch(USER_REPO, "doesNotExist", 0, "x")).toBeNull()
+  })
+
+  test("returns null when the argument position is out of range", () => {
+    expect(detectParamDrivenBranch(USER_REPO, "destroyAndTransfer", 5, "x")).toBeNull()
+  })
+})
+
 // ---- extractUseMap -------------------------------------------------------
 
 describe("extractUseMap from controller file", () => {
@@ -312,8 +361,8 @@ describe("parseControllerMethod — JobDispatchController::store standaloneDispa
     expect(result).not.toBeNull()
   })
 
-  test("detects 3 standalone dispatches total", () => {
-    expect(result!.standaloneDispatches).toHaveLength(3)
+  test("detects 6 standalone dispatches total", () => {
+    expect(result!.standaloneDispatches).toHaveLength(6)
   })
 
   test("ProcessPaymentJob classified as job (static dispatch)", () => {
@@ -333,6 +382,27 @@ describe("parseControllerMethod — JobDispatchController::store standaloneDispa
     const d = result!.standaloneDispatches.find((d) => d.className === "OrderCreated")
     expect(d).toBeDefined()
     expect(d!.kind).toBe("event")
+  })
+
+  test("NotifyWarehouseJob classified as job (Bus::dispatch() — dispatched class is the argument, not Bus)", () => {
+    const d = result!.standaloneDispatches.find((d) => d.className === "NotifyWarehouseJob")
+    expect(d).toBeDefined()
+    expect(d!.kind).toBe("job")
+    expect(d!.fqcn).toBe("App\\Jobs\\NotifyWarehouseJob")
+  })
+
+  test("ExportOrderAction classified as job (Action::run() dispatch)", () => {
+    const d = result!.standaloneDispatches.find((d) => d.className === "ExportOrderAction")
+    expect(d).toBeDefined()
+    expect(d!.kind).toBe("job")
+    expect(d!.fqcn).toBe("App\\Actions\\ExportOrderAction")
+  })
+
+  test("ArchiveOrderAction classified as job (direct ClassName::dispatchSync() — Monica DestroyContact real-repo case)", () => {
+    const d = result!.standaloneDispatches.find((d) => d.className === "ArchiveOrderAction")
+    expect(d).toBeDefined()
+    expect(d!.kind).toBe("job")
+    expect(d!.fqcn).toBe("App\\Actions\\ArchiveOrderAction")
   })
 })
 

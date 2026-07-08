@@ -26,7 +26,18 @@ export interface AuditLogCall {
  * configurable list" posture, kept intentionally simple and extensible via
  * ProjectConfig.conventions.auditSinks.
  */
-export function parseAuditLogCalls(filePath: string, auditSinks: string[]): AuditLogCall[] {
+/**
+ * @param methodName When given, scopes the scan to that method's body only —
+ * required for correct results whenever the caller represents a single
+ * method (e.g. one route's business_handler or one service-call node).
+ * Omitting it scans the whole file and can misattribute an unrelated
+ * method's audit-sink call to a node for a different method in the same
+ * file (found via real-repo regression check on BookStack's `UserRepo.php`,
+ * where `getById()` — which makes no audit calls at all — picked up 3
+ * phantom `Activity::add` nodes belonging to other methods — IR v1.5
+ * Phase 5 fix).
+ */
+export function parseAuditLogCalls(filePath: string, auditSinks: string[], methodName?: string): AuditLogCall[] {
   const sinkSet = new Set(auditSinks)
   if (sinkSet.size === 0) return []
 
@@ -39,9 +50,34 @@ export function parseAuditLogCalls(filePath: string, auditSinks: string[]): Audi
     return []
   }
 
+  const scanRoot = methodName ? findMethod(tree.rootNode, methodName) : tree.rootNode
+  if (!scanRoot) return []
+
   const results: AuditLogCall[] = []
-  gatherAuditLogCalls(tree.rootNode, sinkSet, results)
+  gatherAuditLogCalls(scanRoot, sinkSet, results)
   return results
+}
+
+// ---- Method finder ------------------------------------------------------
+
+function findMethod(root: Parser.SyntaxNode, name: string): Parser.SyntaxNode | null {
+  for (const child of root.children) {
+    const found = findMethodIn(child, name)
+    if (found) return found
+  }
+  return null
+}
+
+function findMethodIn(node: Parser.SyntaxNode, name: string): Parser.SyntaxNode | null {
+  if (node.type === "method_declaration") {
+    const nameNode = node.childForFieldName("name")
+    if (nameNode?.text === name) return node
+  }
+  for (const child of node.children) {
+    const found = findMethodIn(child, name)
+    if (found) return found
+  }
+  return null
 }
 
 function gatherAuditLogCalls(

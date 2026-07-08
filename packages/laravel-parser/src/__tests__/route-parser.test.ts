@@ -111,6 +111,36 @@ describe("parseRouteFile — require includes", () => {
   })
 })
 
+describe("parseRouteFile — Route::namespace() groups", () => {
+  let graphs: ReturnType<typeof parseRouteFile>
+
+  beforeAll(() => {
+    graphs = parseRouteFile(fixture("routes-namespace.php"))
+  })
+
+  test("extracts 3 routes", () => {
+    expect(graphs).toHaveLength(3)
+  })
+
+  test("bare controller under Route::namespace() (fluent form) resolves to the group's namespace, not App\\Http\\Controllers", () => {
+    const g = graphs.find((g) => g.path === "/invoices")!
+    expect(g.nodes[0].symbol).toBe("InvoiceController::index")
+    expect(g.nodes[0].file).toBe("Modules/Accounting/Http/Controllers/InvoiceController.php")
+  })
+
+  test("bare controller under Route::group(['namespace' => ...]) (options-array form) resolves correctly", () => {
+    const g = graphs.find((g) => g.path === "/bills")!
+    expect(g.nodes[0].symbol).toBe("BillController::index")
+    expect(g.nodes[0].file).toBe("Modules/Billing/Http/Controllers/BillController.php")
+  })
+
+  test("route outside any namespace group still falls back to App\\Http\\Controllers", () => {
+    const g = graphs.find((g) => g.path === "/health")!
+    expect(g.nodes[0].symbol).toBe("HealthController::check")
+    expect(g.nodes[0].file).toBe("app/Http/Controllers/HealthController.php")
+  })
+})
+
 describe("parseConstantClass", () => {
   test("parses PHP class constants into a map", () => {
     const map = parseConstantClass(fixture("Permissions.php"))

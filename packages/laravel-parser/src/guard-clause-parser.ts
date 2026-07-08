@@ -9,9 +9,18 @@ _parser.setLanguage((PHP as { php?: unknown }).php ?? PHP)
 export interface GuardClauseResult {
   isGuardClause: boolean
   reason: "leading_if_throw" | "guard_naming_with_throw" | null
+  /**
+   * The actual precondition(s) checked, e.g. "isLastAdmin(); system_name === 'public'"
+   * for ensureDeletable(). Without this, the graph only says "some guard
+   * exists" — an LLM asked "does this block deleting the last admin?" has no
+   * way to answer, since the symbol alone (`ensureDeletable`) doesn't say
+   * what it guards against (confirmed via live gpt-4o re-run — the model
+   * answered "no check found" despite the guard_clause node being present).
+   */
+  conditionText: string | null
 }
 
-const NO_GUARD: GuardClauseResult = { isGuardClause: false, reason: null }
+const NO_GUARD: GuardClauseResult = { isGuardClause: false, reason: null, conditionText: null }
 
 /**
  * Heuristic detection of a "guard clause" method — one that can short-circuit
@@ -41,21 +50,51 @@ export function detectGuardClause(filePath: string, methodName: string): GuardCl
   const methodNode = findMethod(tree.rootNode, methodName)
   if (!methodNode) return NO_GUARD
 
+  return isGuardClauseMethodNode(methodNode, methodName)
+}
+
+/**
+ * Same heuristic as detectGuardClause, but operates on an already-parsed
+ * method node instead of re-reading/re-parsing a file. Lets callers that
+ * already hold the node (e.g. controller-parser.ts's same-class `$this->`
+ * self-call traversal) reuse the exact detection logic without a second
+ * file read — needed because a guard method called as `$this->ensureDeletable()`
+ * from WITHIN its own class never goes through the injected-service-call
+ * path that normally triggers detectGuardClause (IR v1.5 Phase 4,
+ * cross-method-shape extension found via real-repo regression check on
+ * BookStack's UserRepo::destroy -> $this->ensureDeletable()).
+ */
+export function isGuardClauseMethodNode(methodNode: Parser.SyntaxNode, methodName: string): GuardClauseResult {
   const body = methodNode.childForFieldName("body")
   if (!body) return NO_GUARD
 
   const topStatements = body.namedChildren as Parser.SyntaxNode[]
+  const guardStatements = topStatements.filter(isGuardIfStatement)
 
   const first = topStatements[0]
   if (first && isGuardIfStatement(first)) {
-    return { isGuardClause: true, reason: "leading_if_throw" }
+    return { isGuardClause: true, reason: "leading_if_throw", conditionText: guardConditionText(guardStatements) }
   }
 
-  if (matchesGuardNaming(methodName) && topStatements.some(isGuardIfStatement)) {
-    return { isGuardClause: true, reason: "guard_naming_with_throw" }
+  if (matchesGuardNaming(methodName) && guardStatements.length > 0) {
+    return { isGuardClause: true, reason: "guard_naming_with_throw", conditionText: guardConditionText(guardStatements) }
   }
 
   return NO_GUARD
+}
+
+// Joins every guard if-statement's condition into one human-readable string,
+// e.g. "isLastAdmin(); system_name === 'public'" for ensureDeletable()'s two checks.
+function guardConditionText(guardStatements: Parser.SyntaxNode[]): string {
+  return guardStatements
+    .map((stmt) => stripOuterParens(stmt.childForFieldName("condition")?.text ?? ""))
+    .filter((t) => t.length > 0)
+    .join("; ")
+}
+
+function stripOuterParens(text: string): string {
+  const m = text.match(/^\((.*)\)$/s)
+  return m ? m[1] : text
 }
 
 // ---- Heuristic helpers -------------------------------------------------

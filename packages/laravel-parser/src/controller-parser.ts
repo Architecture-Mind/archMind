@@ -4,6 +4,7 @@ import Parser from "tree-sitter"
 import PHP from "tree-sitter-php"
 import { extractReturnedResources } from "./resource-parser.js"
 import { classifyDispatch } from "./transaction-parser.js"
+import { isGuardClauseMethodNode } from "./guard-clause-parser.js"
 
 const _parser = new Parser()
 _parser.setLanguage((PHP as { php?: unknown }).php ?? PHP)
@@ -35,6 +36,17 @@ export interface ServiceCall {
   method:       string   // called method, e.g. "hasPermission" or "apiTokens()->delete" for a mutating chain
   args:         string[] // string literal args extracted from the call site
   mutates?:     boolean  // true when the call chain terminates in a data-mutating operation
+  /**
+   * Set when one of this call's arguments is a variable assigned from
+   * $request->input()/->has()/->boolean() in the caller. Lets the graph
+   * augmenter follow the request parameter one hop into the callee's body
+   * to see if IT branches on the corresponding parameter (IR v1.5 Phase 6,
+   * cross-method extension) — the shape BookStack's
+   * UserApiController::delete -> UserRepo::destroy actually has: the
+   * controller reads the request value and hands it to a service method
+   * that does the real branching.
+   */
+  requestParamArg?: { position: number; requestParamName: string }
 }
 
 export interface ConstructorMiddleware {
@@ -64,6 +76,13 @@ export interface NotificationDispatch {
   callText:  string
 }
 
+export interface SelfGuardCall {
+  /** Name of the same-class private/protected method that is itself a guard clause. */
+  methodName: string
+  /** The actual precondition(s) it checks, e.g. "isLastAdmin(); system_name === 'public'". */
+  conditionText: string | null
+}
+
 export interface ConditionalBranch {
   /** raw condition source text, e.g. "!empty($newOwnerId)" */
   conditionText: string
@@ -86,6 +105,8 @@ export interface ControllerL1 {
   standaloneDispatches:    StandaloneDispatch[]
   standaloneNotifications: NotificationDispatch[]
   conditionalBranches:     ConditionalBranch[]
+  /** Same-class `$this->method()` self-calls whose target is itself a guard clause. */
+  selfGuardCalls:          SelfGuardCall[]
   /** 1-indexed line of the method declaration; used for editor CodeLens anchoring */
   methodLine?:             number
 }
@@ -116,7 +137,7 @@ export function parseControllerMethod(
   const constructorMiddleware = gatherConstructorMiddleware(root)
 
   if (!methodNode) {
-    return { useMap, formRequests: [], authorizeCalls: [], serviceCalls: [], constructorMiddleware, modelParams: [], returnedResources: [], standaloneDispatches: [], standaloneNotifications: [], conditionalBranches: [] }
+    return { useMap, formRequests: [], authorizeCalls: [], serviceCalls: [], constructorMiddleware, modelParams: [], returnedResources: [], standaloneDispatches: [], standaloneNotifications: [], conditionalBranches: [], selfGuardCalls: [] }
   }
 
   const injections = extractConstructorInjections(root, useMap)
@@ -124,23 +145,51 @@ export function parseControllerMethod(
   // Merge: method params take precedence over constructor for same var name
   const allInjections = new Map([...injections, ...methodInjections])
 
+  // Request-derived local vars ($var = $request->input('name')) — computed
+  // once, reused both for same-method branch detection and for tagging
+  // service-call arguments that carry a request value into a callee
+  // (IR v1.5 Phase 6).
+  const requestParamVars = new Map<string, string>()
+  const methodBody = methodNode.childForFieldName("body")
+  if (methodBody) collectRequestParamVars(methodBody, requestParamVars)
+
   const formRequests         = extractFormRequests(methodNode, useMap)
   const modelParams          = extractModelParams(methodNode, useMap)
   const authorizeCalls       = extractAuthorizeCalls(methodNode, modelParams)
-  const serviceCalls         = extractServiceCalls(methodNode, allInjections, useMap)
+  const serviceCalls         = extractServiceCalls(methodNode, allInjections, useMap, requestParamVars)
   const returnedResources      = extractReturnedResources(methodNode, useMap)
   const standaloneDispatches   = extractStandaloneDispatches(methodNode, useMap)
   const standaloneNotifications = extractNotificationDispatches(methodNode, useMap)
-  const conditionalBranches    = extractConditionalBranches(methodNode, allInjections)
+  const conditionalBranches    = requestParamVars.size > 0
+    ? gatherConditionalBranchesFromVars(methodNode, requestParamVars, allInjections)
+    : []
 
   // Depth-1 private method traversal: follow $this->helper() calls into the
   // same class, but do not recurse further to avoid graph blow-up.
+  //
+  // Exception: a private/protected method that is itself a guard clause
+  // (e.g. UserRepo::destroy() calling $this->ensureDeletable($user)) must
+  // NOT be flattened — flattening drops the fact that a guard clause exists
+  // at all, since the guard's own body (an early if/throw) has no calls
+  // worth extracting anyway. Emit it as a selfGuardCall instead so the graph
+  // augmenter can give it a real ir:guard_clause node (IR v1.5 Phase 4,
+  // same-class self-call extension — found via real-repo regression check:
+  // BookStack's ensureDeletable() is called this way, not through an
+  // injected property, so it was invisible in the graph entirely).
   const privateNames = extractPrivateMethodCallNames(methodNode)
+  const selfGuardCalls: SelfGuardCall[] = []
   for (const name of privateNames) {
     const privateMethod = findMethod(root, name)
     if (!privateMethod) continue
+
+    const guardCheck = isGuardClauseMethodNode(privateMethod, name)
+    if (guardCheck.isGuardClause) {
+      selfGuardCalls.push({ methodName: name, conditionText: guardCheck.conditionText })
+      continue
+    }
+
     authorizeCalls.push(...extractAuthorizeCalls(privateMethod, modelParams))
-    serviceCalls.push(...extractServiceCalls(privateMethod, allInjections, useMap))
+    serviceCalls.push(...extractServiceCalls(privateMethod, allInjections, useMap, requestParamVars))
     standaloneDispatches.push(...extractStandaloneDispatches(privateMethod, useMap))
     standaloneNotifications.push(...extractNotificationDispatches(privateMethod, useMap))
   }
@@ -179,6 +228,7 @@ export function parseControllerMethod(
     standaloneDispatches,
     standaloneNotifications,
     conditionalBranches,
+    selfGuardCalls,
     methodLine: methodNode.startPosition.row + 1,  // 1-indexed
   }
 }
@@ -567,16 +617,25 @@ function gatherStandaloneDispatches(
   if (node.type === "scoped_call_expression") {
     const cls  = (node.children as Parser.SyntaxNode[])[0]
     const name = node.childForFieldName("name")
-    if (cls?.text.replace(/^\\/, "") === "DB" && name?.text === "transaction") return
+    const clsText = cls?.text.replace(/^\\/, "") ?? ""
+    if (clsText === "DB" && name?.text === "transaction") return
 
-    // ClassName::dispatch() — static dispatch
-    if (name?.text === "dispatch") {
-      const clsText = cls?.text.replace(/^\\/, "") ?? ""
-      if (clsText && clsText !== "DB" && clsText !== "Bus") {
-        const fqcn = useMap.get(clsText) ?? clsText
-        results.push({ className: clsText, fqcn, kind: classifyDispatch(fqcn), callText: node.text })
+    // Bus::dispatch() / Bus::dispatchSync() / Bus::dispatchNow() — the dispatched
+    // class is the call argument, not "Bus" itself (unlike Job::dispatch()).
+    if (clsText === "Bus" && name && THIS_DISPATCH_METHODS.has(name.text)) {
+      const arg = firstArgClassName(node, useMap)
+      if (arg) {
+        results.push(arg)
         return
       }
+    }
+
+    // ClassName::dispatch()/dispatchSync()/dispatchNow() — static dispatch (Job/Action classes)
+    // ClassName::run() — laravel-actions execute-inline pattern
+    if (clsText && clsText !== "DB" && clsText !== "Bus" && name && (THIS_DISPATCH_METHODS.has(name.text) || name.text === "run")) {
+      const fqcn = useMap.get(clsText) ?? clsText
+      results.push({ className: clsText, fqcn, kind: classifyDispatch(fqcn), callText: node.text })
+      return
     }
   }
 
@@ -732,12 +791,13 @@ function extractMethodParamInjections(
 function extractServiceCalls(
   methodNode: Parser.SyntaxNode,
   injections: Map<string, string>,
-  _useMap: Map<string, string>
+  _useMap: Map<string, string>,
+  requestParamVars: Map<string, string> = new Map()
 ): ServiceCall[] {
   const results: ServiceCall[] = []
   const body = methodNode.childForFieldName("body")
   if (!body) return results
-  gatherServiceCalls(body, injections, results)
+  gatherServiceCalls(body, injections, results, requestParamVars)
   return results
 }
 
@@ -748,12 +808,32 @@ const MUTATING_METHODS = new Set([
   "delete", "update", "save", "create", "attach", "detach", "sync", "forceDelete",
 ])
 
+// Scans a call's argument list for a variable_name argument that matches a
+// request-derived var (IR v1.5 Phase 6, cross-method extension) and returns
+// its position + the originating request parameter name, if any.
+function findRequestParamArg(
+  argsNode: Parser.SyntaxNode | null,
+  requestParamVars: Map<string, string>
+): { position: number; requestParamName: string } | undefined {
+  if (!argsNode || requestParamVars.size === 0) return undefined
+  const argNodes = (argsNode.children as Parser.SyntaxNode[]).filter((c) => c.type === "argument")
+  for (let i = 0; i < argNodes.length; i++) {
+    const val = argNodes[i].firstNamedChild
+    if (val?.type !== "variable_name") continue
+    const varName = val.text.replace(/^\$/, "")
+    const requestParamName = requestParamVars.get(varName)
+    if (requestParamName) return { position: i, requestParamName }
+  }
+  return undefined
+}
+
 // Matches a member_call_expression against Pattern 1 ($this->prop->method(args))
 // or Pattern 2 ($localVar->method(args)) and returns the resolved ServiceCall,
 // without pushing it to any results array.
 function tryExtractBaseServiceCall(
   callNode: Parser.SyntaxNode,
-  injections: Map<string, string>
+  injections: Map<string, string>,
+  requestParamVars: Map<string, string> = new Map()
 ): ServiceCall | null {
   const objNode  = callNode.childForFieldName("object")
   const nameNode = callNode.childForFieldName("name")
@@ -772,6 +852,7 @@ function tryExtractBaseServiceCall(
         const shortName  = fqcn.split("\\").pop() ?? fqcn
         const argsNode   = callNode.childForFieldName("arguments")
         const stringArgs = argsNode ? extractStringCallArgs(argsNode) : []
+        const requestParamArg = findRequestParamArg(argsNode, requestParamVars)
 
         return {
           propertyName: prop,
@@ -779,6 +860,7 @@ function tryExtractBaseServiceCall(
           serviceFqcn:  fqcn,
           method:       nameNode.text,
           args:         stringArgs,
+          ...(requestParamArg ? { requestParamArg } : {}),
         }
       }
     }
@@ -793,6 +875,7 @@ function tryExtractBaseServiceCall(
       const shortName  = fqcn.split("\\").pop() ?? fqcn
       const argsNode   = callNode.childForFieldName("arguments")
       const stringArgs = argsNode ? extractStringCallArgs(argsNode) : []
+      const requestParamArg = findRequestParamArg(argsNode, requestParamVars)
 
       return {
         propertyName: varName,
@@ -800,6 +883,7 @@ function tryExtractBaseServiceCall(
         serviceFqcn:  fqcn,
         method:       nameNode.text,
         args:         stringArgs,
+        ...(requestParamArg ? { requestParamArg } : {}),
       }
     }
   }
@@ -810,7 +894,8 @@ function tryExtractBaseServiceCall(
 function gatherServiceCalls(
   node: Parser.SyntaxNode,
   injections: Map<string, string>,
-  results: ServiceCall[]
+  results: ServiceCall[],
+  requestParamVars: Map<string, string> = new Map()
 ): void {
   if (node.type === "member_call_expression") {
     const objNode  = node.childForFieldName("object")
@@ -821,7 +906,7 @@ function gatherServiceCalls(
       // $user->apiTokens()->delete() — fold into one node instead of dropping
       // the mutation or double-emitting the base accessor separately.
       if (objNode?.type === "member_call_expression" && MUTATING_METHODS.has(nameNode.text)) {
-        const base = tryExtractBaseServiceCall(objNode, injections)
+        const base = tryExtractBaseServiceCall(objNode, injections, requestParamVars)
         if (base) {
           results.push({
             ...base,
@@ -831,19 +916,19 @@ function gatherServiceCalls(
           // objNode is fully consumed by the combined node above — recurse
           // into the rest of the chain but skip re-visiting it standalone.
           for (const child of node.children as Parser.SyntaxNode[]) {
-            if (child !== objNode) gatherServiceCalls(child, injections, results)
+            if (child !== objNode) gatherServiceCalls(child, injections, results, requestParamVars)
           }
           return
         }
       }
 
-      const base = tryExtractBaseServiceCall(node, injections)
+      const base = tryExtractBaseServiceCall(node, injections, requestParamVars)
       if (base) results.push(base)
     }
   }
 
   for (const child of node.children as Parser.SyntaxNode[]) {
-    gatherServiceCalls(child, injections, results)
+    gatherServiceCalls(child, injections, results, requestParamVars)
   }
 }
 
@@ -873,16 +958,13 @@ function extractStringCallArgs(argsNode: Parser.SyntaxNode): string[] {
 
 const REQUEST_INPUT_METHODS = new Set(["input", "has", "boolean"])
 
-function extractConditionalBranches(
+function gatherConditionalBranchesFromVars(
   methodNode: Parser.SyntaxNode,
+  requestParamVars: Map<string, string>,
   injections: Map<string, string>
 ): ConditionalBranch[] {
   const body = methodNode.childForFieldName("body")
   if (!body) return []
-
-  const requestParamVars = new Map<string, string>()
-  collectRequestParamVars(body, requestParamVars)
-  if (requestParamVars.size === 0) return []
 
   const branches: ConditionalBranch[] = []
   gatherConditionalBranches(body, requestParamVars, injections, branches)
@@ -950,6 +1032,62 @@ function gatherConditionalBranches(
 function stripOuterParens(text: string): string {
   const m = text.match(/^\((.*)\)$/s)
   return m ? m[1] : text
+}
+
+/**
+ * Cross-method extension of Phase 6's narrow cut: when a controller reads a
+ * request parameter and passes it as an argument to a directly-called
+ * service method (e.g. BookStack's
+ * `UserApiController::delete` -> `$this->userRepo->destroy($user, $newOwnerId)`
+ * where `$newOwnerId` came from `$request->input('migrate_ownership_id')`),
+ * the actual if/else often lives one hop away, inside the callee, keyed off
+ * its own parameter name rather than a `$request->input()` call the callee
+ * never makes. This resolves the callee's parameter name at `argPosition`
+ * and looks for an if/else branching on it, same shape as the same-method
+ * case but seeded from the caller's request-param name instead of a local
+ * `$request->input()` assignment.
+ *
+ * Still a narrow, single-hop cut — does not chase the value through further
+ * calls if the callee re-passes it onward again.
+ */
+export function detectParamDrivenBranch(
+  filePath: string,
+  methodName: string,
+  argPosition: number,
+  requestParamName: string
+): ConditionalBranch | null {
+  let source: string
+  let tree: ReturnType<typeof _parser.parse>
+  try {
+    source = readFileSync(filePath, "utf-8")
+    tree = _parser.parse(source)
+  } catch {
+    return null
+  }
+  const root = tree.rootNode
+  const methodNode = findMethod(root, methodName)
+  if (!methodNode) return null
+
+  const paramsNode = methodNode.childForFieldName("parameters")
+  if (!paramsNode) return null
+  const params = (paramsNode.children as Parser.SyntaxNode[]).filter(
+    (c) => c.type === "simple_parameter" || c.type === "property_promotion_parameter"
+  )
+  const targetParam = params[argPosition]
+  if (!targetParam) return null
+  const varNode = (targetParam.children as Parser.SyntaxNode[]).find((c) => c.type === "variable_name")
+  if (!varNode) return null
+  const paramVarName = varNode.text.replace(/^\$/, "")
+
+  const useMap = extractUseMap(root)
+  const injections = extractConstructorInjections(root, useMap)
+  const methodInjections = extractMethodParamInjections(methodNode, useMap)
+  const allInjections = new Map([...injections, ...methodInjections])
+
+  const seededVars = new Map<string, string>([[paramVarName, requestParamName]])
+  const branches: ConditionalBranch[] = []
+  gatherConditionalBranches(methodNode, seededVars, allInjections, branches)
+  return branches[0] ?? null
 }
 
 // ---- Notification + Mail dispatch extraction (18B.3) -----------------

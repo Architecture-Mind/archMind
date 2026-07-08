@@ -30,7 +30,14 @@ const SNIPPET_NODE_THRESHOLD = 20
 function serializeNode(node: ExecutionNode, projectRoot?: string): string {
   const argsStr = node.args?.length ? `(${node.args.join(", ")})` : ""
   const mutatesStr = node.mutates ? " [MUTATES]" : ""
-  const header = `  ${node.symbol}${argsStr} [${node.type}]${mutatesStr}`
+  // node.detail carries semantic info a symbol/type alone can't (e.g. the
+  // request-param name driving an ir:conditional_branch, or the actual
+  // condition an ir:guard_clause checks). Dropping it silently starves the
+  // LLM of exactly the fact it needs — confirmed via live gpt-4o re-run:
+  // the graph had the right node, but without this line the model couldn't
+  // tell "!empty($newOwnerId)" was about content ownership at all.
+  const detailStr = node.detail ? `\n    detail: ${node.detail}` : ""
+  const header = `  ${node.symbol}${argsStr} [${node.type}]${mutatesStr}${detailStr}`
   if (!projectRoot) return header
   const snippet = loadCodeSlice(node, projectRoot)
   if (!snippet) return header

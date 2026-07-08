@@ -13,6 +13,26 @@ export interface TransactionBlock {
   dispatches: DispatchCall[]
   /** Eloquent model writes (create/update/delete/save) inside the transaction */
   writes: ModelWrite[]
+  /**
+   * `$this->prop->method()` / `$this->method()` call sites found directly
+   * inside the closure — a write may happen one hop away, inside the
+   * callee, invisible to this file's own pattern-matching (e.g. BookStack's
+   * `DB::transaction(fn () => $this->userRepo->create(...))`, where the
+   * actual `User::create()` write lives inside `UserRepo::create()`, not in
+   * the closure text itself). Raw syntax only — no FQCN/file resolution
+   * here, since this module has no namespace-map context; the graph
+   * augmenter cross-references these against the service-call nodes it
+   * already creates for the same caller to link `ir:wraps` (IR v1.5 Phase 3,
+   * nested-service-call extension — found via real-repo regression check on
+   * BookStack's `UserApiController::create`).
+   */
+  nestedServiceCalls: NestedServiceCall[]
+}
+
+export interface NestedServiceCall {
+  /** injected property name, e.g. "userRepo" — empty string for a self-call ($this->method()) */
+  propertyName: string
+  method: string
 }
 
 export interface DispatchCall {
@@ -38,7 +58,17 @@ export interface TransactionParseResult {
   blocks: TransactionBlock[]
 }
 
-export function parseTransactions(filePath: string): TransactionParseResult {
+/**
+ * @param methodName When given, scopes the scan to that method's body only —
+ * required for correct results whenever the caller represents a single
+ * method (e.g. one route's business_handler or one service-call node).
+ * Omitting it scans the whole file and can misattribute an unrelated
+ * method's `DB::transaction()` to a node for a different method in the same
+ * file (found via real-repo regression check on BookStack's
+ * `UserApiController.php`, where `create()`'s transaction was bleeding into
+ * `delete()`'s graph — IR v1.5 Phase 3 fix).
+ */
+export function parseTransactions(filePath: string, methodName?: string): TransactionParseResult {
   let source: string
   let tree: ReturnType<typeof _parser.parse>
   try {
@@ -47,12 +77,36 @@ export function parseTransactions(filePath: string): TransactionParseResult {
   } catch {
     return { hasTransaction: false, blocks: [] }
   }
-  const root  = tree.rootNode
-  const blocks: TransactionBlock[] = []
 
-  gatherTransactionBlocks(root, blocks)
+  const scanRoot = methodName ? findMethod(tree.rootNode, methodName) : tree.rootNode
+  if (!scanRoot) return { hasTransaction: false, blocks: [] }
+
+  const blocks: TransactionBlock[] = []
+  gatherTransactionBlocks(scanRoot, blocks)
 
   return { hasTransaction: blocks.length > 0, blocks }
+}
+
+// ---- Method finder ------------------------------------------------------
+
+function findMethod(root: Parser.SyntaxNode, name: string): Parser.SyntaxNode | null {
+  for (const child of root.children) {
+    const found = findMethodIn(child, name)
+    if (found) return found
+  }
+  return null
+}
+
+function findMethodIn(node: Parser.SyntaxNode, name: string): Parser.SyntaxNode | null {
+  if (node.type === "method_declaration") {
+    const nameNode = node.childForFieldName("name")
+    if (nameNode?.text === name) return node
+  }
+  for (const child of node.children) {
+    const found = findMethodIn(child, name)
+    if (found) return found
+  }
+  return null
 }
 
 // ---- Tree traversal ---------------------------------------------------
@@ -64,7 +118,7 @@ function gatherTransactionBlocks(
   if (isDbTransactionCall(node)) {
     const closure = findClosureArg(node)
     if (closure) {
-      const block: TransactionBlock = { dispatches: [], writes: [] }
+      const block: TransactionBlock = { dispatches: [], writes: [], nestedServiceCalls: [] }
       gatherDispatchesAndWrites(closure, block)
       blocks.push(block)
       // Don't descend further into this closure — it's already captured
@@ -146,6 +200,19 @@ function gatherDispatchesAndWrites(
       })
     }
 
+    // $this->prop->method() / $this->method() — a write may live one hop
+    // inside the callee, invisible to this file's own pattern-matching.
+    const objNode = node.childForFieldName("object")
+    if (objNode?.type === "member_access_expression") {
+      const innerObj = objNode.childForFieldName("object")
+      const propNode = objNode.childForFieldName("name")
+      if (innerObj?.text === "$this" && propNode && name) {
+        block.nestedServiceCalls.push({ propertyName: propNode.text, method: name.text })
+      }
+    } else if (objNode?.type === "variable_name" && objNode.text === "$this" && name) {
+      block.nestedServiceCalls.push({ propertyName: "", method: name.text })
+    }
+
     // dispatch(new SomeJob()) — standalone dispatch() helper call handled separately
   }
 
@@ -174,8 +241,10 @@ function gatherDispatchesAndWrites(
 export function classifyDispatch(fqcnOrShort: string): "event" | "job" | "unknown" {
   const parts = fqcnOrShort.split("\\")
   const name  = parts[parts.length - 1] ?? fqcnOrShort
-  // Namespace-based classification is most reliable when FQCN is available
-  if (parts.includes("Jobs"))   return "job"
+  // Namespace-based classification is most reliable when FQCN is available.
+  // "Actions" (laravel-actions package convention) executes synchronously like
+  // a job — classified as "job" rather than adding a third dispatch kind.
+  if (parts.includes("Jobs") || parts.includes("Actions")) return "job"
   if (parts.includes("Events")) return "event"
   // Name-based heuristics for short names or unconventional namespaces
   if (/Event|Was[A-Z]|Created|Updated|Deleted|Fired|Dispatched/.test(name)) return "event"

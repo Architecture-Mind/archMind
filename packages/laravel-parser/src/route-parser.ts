@@ -36,7 +36,7 @@ export function parseRouteFile(
   opts: ParseOptions = {}
 ): IntermediateExecutionGraph[] {
   const out: IntermediateExecutionGraph[] = []
-  processFile(filePath, { middleware: [...(opts.wrappingMiddleware ?? [])], prefix: "" }, out, opts)
+  processFile(filePath, { middleware: [...(opts.wrappingMiddleware ?? [])], prefix: "", namespace: "" }, out, opts)
   return out
 }
 
@@ -45,6 +45,11 @@ export function parseRouteFile(
 interface RouteCtx {
   middleware: string[]
   prefix:     string
+  // Set by Route::namespace()->group() / Route::group(['namespace' => ...]).
+  // Resolves bare (non-FQCN, non-`use`d) controller names within the group —
+  // e.g. module packages (nwidart/laravel-modules) that register routes under
+  // a package namespace instead of the App\Http\Controllers\ convention.
+  namespace:  string
 }
 
 interface MethodCall {
@@ -147,6 +152,7 @@ function handleRouteExpression(
 
   if (groupIdx >= 0) {
     let newPrefix = ctx.prefix
+    let newNamespace = ctx.namespace
     const newMiddleware = [...ctx.middleware]
 
     for (let i = 0; i < groupIdx; i++) {
@@ -156,6 +162,9 @@ function handleRouteExpression(
       } else if (m.name === "prefix") {
         const seg = resolveString(m.args[0], opts.constants)
         if (seg) newPrefix = joinPath(newPrefix, seg)
+      } else if (m.name === "namespace") {
+        const ns = resolveString(m.args[0], opts.constants)
+        if (ns) newNamespace = ns.replace(/^\\|\\$/g, "")
       }
       // name(), scopeBindings(), where() — ignored
     }
@@ -168,7 +177,13 @@ function handleRouteExpression(
     let closureNode: Parser.SyntaxNode | undefined
     if (groupArgs[0]?.type === "array_creation_expression") {
       // Form 2 — extract middleware and prefix from the options array
-      extractGroupOptions(groupArgs[0], newMiddleware, opts, (seg) => { newPrefix = joinPath(newPrefix, seg) })
+      extractGroupOptions(
+        groupArgs[0],
+        newMiddleware,
+        opts,
+        (seg) => { newPrefix = joinPath(newPrefix, seg) },
+        (ns) => { newNamespace = ns }
+      )
       closureNode = groupArgs[1]
     } else {
       closureNode = groupArgs[0]
@@ -177,7 +192,7 @@ function handleRouteExpression(
     if (closureNode) {
       const body = getFunctionBody(closureNode)
       if (body) {
-        walkBlock(body, { middleware: newMiddleware, prefix: newPrefix }, out, file, opts, useMap)
+        walkBlock(body, { middleware: newMiddleware, prefix: newPrefix, namespace: newNamespace }, out, file, opts, useMap)
       }
     }
     return
@@ -244,7 +259,7 @@ function handleRouteExpression(
     for (const r of candidateRoutes) {
       if (only.size > 0 && !only.has(r.action)) continue
       if (except.size > 0 && except.has(r.action)) continue
-      out.push(buildGraph(r.method, fullPath + r.suffix, allMiddleware, controller, r.action, useMap, opts))
+      out.push(buildGraph(r.method, fullPath + r.suffix, allMiddleware, controller, r.action, useMap, opts, ctx.namespace))
     }
     return
   }
@@ -262,7 +277,7 @@ function handleRouteExpression(
   const method = routeVerb.name.toUpperCase()
   const { controller, action } = extractControllerAction(routeVerb.args[1])
 
-  out.push(buildGraph(method, fullPath, [...ctx.middleware, ...inlineMiddleware], controller, action, useMap, opts))
+  out.push(buildGraph(method, fullPath, [...ctx.middleware, ...inlineMiddleware], controller, action, useMap, opts, ctx.namespace))
 }
 
 // ---- Graph construction -----------------------------------------------
@@ -274,7 +289,8 @@ function buildGraph(
   controller: string,
   action: string,
   useMap: Map<string, string>,
-  opts: ParseOptions = {}
+  opts: ParseOptions = {},
+  routeNamespace = ""
 ): IntermediateExecutionGraph {
   const nodes: ExecutionNode[] = []
   const edges: ExecutionEdge[] = []
@@ -294,10 +310,15 @@ function buildGraph(
 
   // Resolve controller short name → FQCN → relative file path.
   // For Laravel ≤8 string routes ('Controller@method'), useMap is typically empty since
-  // web.php has no use statements. Fall back to the conventional Controllers namespace.
+  // web.php has no use statements. Fall back to the group's Route::namespace() (module
+  // packages like nwidart/laravel-modules), or the conventional App\Http\Controllers\.
   const fqcnFromMap = useMap.get(controller)
   const fqcn = fqcnFromMap
-    ?? (controller.includes("\\") ? controller : `App\\Http\\Controllers\\${controller}`)
+    ?? (controller.includes("\\")
+      ? controller
+      : routeNamespace
+        ? `${routeNamespace}\\${controller}`
+        : `App\\Http\\Controllers\\${controller}`)
   const file = fqcn.includes("\\")
     ? (opts.namespaces ? fqcnToPath(fqcn, opts.namespaces) ?? undefined : fqcn.replace(/^App\\/, "app/").replace(/\\/g, "/") + ".php")
     : undefined
@@ -396,7 +417,8 @@ function extractGroupOptions(
   optionsNode: Parser.SyntaxNode,
   middlewareOut: string[],
   opts: ParseOptions,
-  onPrefix: (seg: string) => void
+  onPrefix: (seg: string) => void,
+  onNamespace: (ns: string) => void
 ): void {
   for (const child of optionsNode.children) {
     if (child.type !== "array_element_initializer") continue
@@ -413,6 +435,9 @@ function extractGroupOptions(
     } else if (key === "prefix") {
       const seg = resolveString(value, opts.constants)
       if (seg) onPrefix(seg)
+    } else if (key === "namespace") {
+      const ns = resolveString(value, opts.constants)
+      if (ns) onNamespace(ns.replace(/^\\|\\$/g, ""))
     }
   }
 }

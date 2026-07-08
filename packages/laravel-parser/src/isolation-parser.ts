@@ -51,7 +51,17 @@ const DEFAULT_TENANT_SIGNALS = [
 
 const DEFAULT_TENANT_CONTAINER_KEYS = ["tenant", "organization"]
 
-export function parseIsolation(filePath: string, opts: IsolationOptions = {}): IsolationParseResult {
+/**
+ * @param methodName When given, scopes the scan to that method's body only —
+ * required for correct results whenever the caller represents a single
+ * method (e.g. one route's business_handler or one service-call node).
+ * Omitting it scans the whole file and misattributes unrelated methods'
+ * queries/writes to the current node (found via real-repo blind test on
+ * invoiceninja's `UserController`, where `store()`/`update()`/`detach()`
+ * writes were bleeding into `purge()`'s graph — same root cause class as the
+ * IR v1.5 Phase 3/5 transaction/audit-log fixes).
+ */
+export function parseIsolation(filePath: string, opts: IsolationOptions = {}, methodName?: string): IsolationParseResult {
   const tenantSignals = new Set(opts.tenantSignals ?? DEFAULT_TENANT_SIGNALS)
   const tenantContainerKeys = opts.tenantContainerKeys ?? DEFAULT_TENANT_CONTAINER_KEYS
 
@@ -63,16 +73,39 @@ export function parseIsolation(filePath: string, opts: IsolationOptions = {}): I
   } catch {
     return { modelQueries: [], modelWrites: [], readsTenantFromContainer: false }
   }
-  const root  = tree.rootNode
+  const scanRoot = methodName ? findMethod(tree.rootNode, methodName) : tree.rootNode
+  if (!scanRoot) return { modelQueries: [], modelWrites: [], readsTenantFromContainer: false }
 
   const modelQueries: ModelQueryCall[] = []
   const modelWrites:  ModelWriteCall[] = []
-  const readsTenantFromContainer       = detectTenantContainerRead(root, tenantContainerKeys)
+  const readsTenantFromContainer       = detectTenantContainerRead(scanRoot, tenantContainerKeys)
 
-  gatherModelQueries(root, modelQueries, tenantSignals)
-  gatherModelWrites(root, modelWrites, tenantSignals)
+  gatherModelQueries(scanRoot, modelQueries, tenantSignals)
+  gatherModelWrites(scanRoot, modelWrites, tenantSignals)
 
   return { modelQueries, modelWrites, readsTenantFromContainer }
+}
+
+// ---- Method finder ------------------------------------------------------
+
+function findMethod(root: Parser.SyntaxNode, name: string): Parser.SyntaxNode | null {
+  for (const child of root.children) {
+    const found = findMethodIn(child, name)
+    if (found) return found
+  }
+  return null
+}
+
+function findMethodIn(node: Parser.SyntaxNode, name: string): Parser.SyntaxNode | null {
+  if (node.type === "method_declaration") {
+    const nameNode = node.childForFieldName("name")
+    if (nameNode?.text === name) return node
+  }
+  for (const child of node.children) {
+    const found = findMethodIn(child, name)
+    if (found) return found
+  }
+  return null
 }
 
 // ---- Container read detection -----------------------------------------

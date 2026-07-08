@@ -6,6 +6,13 @@
 
 export const IR_VERSION = "1.10"
 
+// Semantic Coverage (narrow scope — the 6 gaps from
+// research/semantic-ir/v1.5-semantic-fidelity-plan.md, per discuss6.txt's
+// proposed metric): 6/6. All 6 phases landed AND real-repo regression-checked
+// against koel/BookStack (not just unit fixtures) as of IR_VERSION 1.10 —
+// see research/semantic-ir/v1.5-session-handoff.md for what each phase's
+// real-repo verification actually found and fixed.
+
 // ---------------------------------------------------------------------------
 // IR Node Types
 // ---------------------------------------------------------------------------

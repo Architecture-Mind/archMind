@@ -28,15 +28,15 @@ function apiRes(cache: ParseCache<unknown> | null, filePath: string): ApiRes {
   return (cache as ParseCache<ApiRes>).compute(filePath, "parseApiResource", () => parseApiResource(filePath))
 }
 
-function txnRes(cache: ParseCache<unknown> | null, filePath: string): TxnRes {
-  if (!cache) return parseTransactions(filePath)
-  return (cache as ParseCache<TxnRes>).compute(filePath, "parseTransactions", () => parseTransactions(filePath))
+function txnRes(cache: ParseCache<unknown> | null, filePath: string, methodName: string): TxnRes {
+  if (!cache) return parseTransactions(filePath, methodName)
+  return (cache as ParseCache<TxnRes>).compute(filePath, `parseTransactions::${methodName}`, () => parseTransactions(filePath, methodName))
 }
 
-function isoRes(cache: ParseCache<unknown> | null, filePath: string, opts: { tenantSignals: string[]; tenantContainerKeys: string[] }): IsoRes {
-  if (!cache) return parseIsolation(filePath, opts)
+function isoRes(cache: ParseCache<unknown> | null, filePath: string, opts: { tenantSignals: string[]; tenantContainerKeys: string[] }, methodName: string): IsoRes {
+  if (!cache) return parseIsolation(filePath, opts, methodName)
   // opts are constant per project root, so discriminator doesn't need to include them
-  return (cache as ParseCache<IsoRes>).compute(filePath, "parseIsolation", () => parseIsolation(filePath, opts))
+  return (cache as ParseCache<IsoRes>).compute(filePath, `parseIsolation::${methodName}`, () => parseIsolation(filePath, opts, methodName))
 }
 
 type GuardRes = ReturnType<typeof detectGuardClause>
@@ -48,11 +48,11 @@ function guardRes(cache: ParseCache<unknown> | null, filePath: string, methodNam
 
 type AuditRes = ReturnType<typeof parseAuditLogCalls>
 
-function auditRes(cache: ParseCache<unknown> | null, filePath: string, auditSinks: string[]): AuditRes {
-  if (!cache) return parseAuditLogCalls(filePath, auditSinks)
-  return (cache as ParseCache<AuditRes>).compute(filePath, `auditLog::${auditSinks.join(",")}`, () => parseAuditLogCalls(filePath, auditSinks))
+function auditRes(cache: ParseCache<unknown> | null, filePath: string, auditSinks: string[], methodName: string): AuditRes {
+  if (!cache) return parseAuditLogCalls(filePath, auditSinks, methodName)
+  return (cache as ParseCache<AuditRes>).compute(filePath, `auditLog::${auditSinks.join(",")}::${methodName}`, () => parseAuditLogCalls(filePath, auditSinks, methodName))
 }
-import { parseControllerMethod, parseFormRequestAuthorize, type ServiceCall, type ModelParam, type StandaloneDispatch, type NotificationDispatch } from "./controller-parser.js"
+import { parseControllerMethod, parseFormRequestAuthorize, detectParamDrivenBranch, type ServiceCall, type ModelParam, type StandaloneDispatch, type NotificationDispatch, type ConditionalBranch } from "./controller-parser.js"
 import type { ListenerEntry } from "./event-listener-mapper.js"
 import { middlewareToNode } from "./middleware-mapper.js"
 import { parseEventListeners } from "./event-listener-mapper.js"
@@ -228,6 +228,11 @@ export function augmentGraph(
         // Conditional branches driven by a request parameter (IR v1.5 Phase 6, narrow cut)
         addConditionalBranchNodes(newNodes, newEdges, ctrlNode.id, l1.conditionalBranches, config.namespaces, opts.projectRoot, cache)
 
+        // Same-class self-call guard clauses (IR v1.5 Phase 4, same-class self-call extension)
+        if (l1.selfGuardCalls.length > 0) {
+          addSelfGuardClauseNodes(newNodes, newEdges, ctrlNode.id, ctrlNode.file, ctrlClass, l1.selfGuardCalls, ctrlServiceNodes)
+        }
+
         // Service calls from policy methods
         const policyServiceNodes: ExecutionNode[] = []
         for (const policyNode of addedPolicyNodes) {
@@ -303,10 +308,17 @@ export function augmentGraph(
   // ---- Transaction pass ------------------------------------------------
   const ctrlNodeForTxn = graph.nodes.find((n) => n.type === IR_NODE_TYPES.BUSINESS_HANDLER)
   if (ctrlNodeForTxn?.file) {
-    const filePath = join(opts.projectRoot, ctrlNodeForTxn.file)
-    const txnResult = txnRes(cache, filePath)
-    if (txnResult.hasTransaction) {
-      addTransactionNodes(newNodes, newEdges, ctrlNodeForTxn.id, txnResult.blocks)
+    const [, txnMethodName] = ctrlNodeForTxn.symbol.split("::")
+    if (txnMethodName) {
+      const filePath = join(opts.projectRoot, ctrlNodeForTxn.file)
+      const txnResult = txnRes(cache, filePath, txnMethodName)
+      if (txnResult.hasTransaction) {
+        // ctrlL1 is memoized by (filePath, method) — re-fetching here is a
+        // cache hit, not a re-parse. Needed to resolve nested-service-call
+        // wraps edges against the already-created service-call nodes.
+        const txnL1 = ctrlL1(cache, filePath, txnMethodName)
+        addTransactionNodes(newNodes, newEdges, ctrlNodeForTxn.id, txnResult.blocks, txnL1?.serviceCalls ?? [])
+      }
     }
   }
 
@@ -316,19 +328,25 @@ export function augmentGraph(
   // ---- Isolation pass --------------------------------------------------
   const ctrlNodeForIso = graph.nodes.find((n) => n.type === IR_NODE_TYPES.BUSINESS_HANDLER)
   if (ctrlNodeForIso?.file) {
-    const filePath = join(opts.projectRoot, ctrlNodeForIso.file)
-    const isoConv  = { tenantSignals: config.conventions.tenantSignals, tenantContainerKeys: config.conventions.tenantContainerKeys }
-    const isoResult = isoRes(cache, filePath, isoConv)
-    addIsolationNodes(newNodes, newEdges, ctrlNodeForIso.id, isoResult)
+    const [, isoMethodName] = ctrlNodeForIso.symbol.split("::")
+    if (isoMethodName) {
+      const filePath = join(opts.projectRoot, ctrlNodeForIso.file)
+      const isoConv  = { tenantSignals: config.conventions.tenantSignals, tenantContainerKeys: config.conventions.tenantContainerKeys }
+      const isoResult = isoRes(cache, filePath, isoConv, isoMethodName)
+      addIsolationNodes(newNodes, newEdges, ctrlNodeForIso.id, isoResult)
+    }
   }
 
   // ---- Audit log pass (IR v1.5 Phase 5) --------------------------------
   const ctrlNodeForAudit = graph.nodes.find((n) => n.type === IR_NODE_TYPES.BUSINESS_HANDLER)
   if (ctrlNodeForAudit?.file && config.conventions.auditSinks.length > 0) {
-    const filePath = join(opts.projectRoot, ctrlNodeForAudit.file)
-    const auditCalls = auditRes(cache, filePath, config.conventions.auditSinks)
-    if (auditCalls.length > 0) {
-      addAuditLogNodes(newNodes, newEdges, ctrlNodeForAudit.id, auditCalls)
+    const [, auditMethodName] = ctrlNodeForAudit.symbol.split("::")
+    if (auditMethodName) {
+      const filePath = join(opts.projectRoot, ctrlNodeForAudit.file)
+      const auditCalls = auditRes(cache, filePath, config.conventions.auditSinks, auditMethodName)
+      if (auditCalls.length > 0) {
+        addAuditLogNodes(newNodes, newEdges, ctrlNodeForAudit.id, auditCalls)
+      }
     }
   }
 
@@ -447,6 +465,17 @@ function inferPolicyClass(controllerClass: string): string {
 }
 
 /**
+ * Deterministic node ID for a service call scoped to its caller — shared by
+ * addServiceCallNodes (which creates the node) and the transaction wrap-edge
+ * wiring (which needs to point at an already-created node without holding a
+ * reference to it).
+ */
+function serviceCallNodeId(sc: ServiceCall, callerNodeId: string): string {
+  const idBase = `svc_${sc.serviceClass}_${sc.method}`.toLowerCase().replace(/[^a-z0-9]/g, "_")
+  return `${idBase}_${callerNodeId.replace(/[^a-z0-9]/g, "_")}`
+}
+
+/**
  * Add service_call nodes and their edges from a parsed method's service calls.
  * Each node ID is scoped to the caller to allow the same service to be called
  * from multiple places (e.g. CheckPermission AND TaskPolicy both call hasPermission).
@@ -466,8 +495,7 @@ function addServiceCallNodes(
 
   for (const sc of serviceCalls) {
     // Scope ID by caller so same service called from different nodes creates separate nodes
-    const idBase = `svc_${sc.serviceClass}_${sc.method}`.toLowerCase().replace(/[^a-z0-9]/g, "_")
-    const id     = `${idBase}_${callerNodeId.replace(/[^a-z0-9]/g, "_")}`
+    const id = serviceCallNodeId(sc, callerNodeId)
 
     if (seen.has(id)) continue
     seen.add(id)
@@ -479,7 +507,7 @@ function addServiceCallNodes(
     // own node type instead of a generic service_call.
     const guard = file
       ? guardRes(cache, join(projectRoot, file), sc.method)
-      : { isGuardClause: false, reason: null }
+      : { isGuardClause: false, reason: null, conditionText: null }
 
     const node: ExecutionNode = {
       id,
@@ -489,6 +517,10 @@ function addServiceCallNodes(
       ...(file               ? { file }      : {}),
       ...(sc.args.length > 0 ? { args: sc.args } : {}),
       ...(sc.mutates         ? { mutates: true } : {}),
+      // The actual precondition(s) checked — without this the LLM only
+      // knows "some guard exists", not what it guards against (IR v1.5
+      // Phase 4 extension, found via live gpt-4o re-run).
+      ...(guard.isGuardClause && guard.conditionText ? { detail: guard.conditionText } : {}),
     }
 
     nodes.push(node)
@@ -500,6 +532,23 @@ function addServiceCallNodes(
       relation:     "calls",
       traceability: "semantic",
     })
+
+    // Cross-method extension of Phase 6 (narrow cut): this call received a
+    // request-derived value as one of its arguments — check whether the
+    // callee itself branches on the corresponding parameter (BookStack's
+    // UserApiController::delete -> UserRepo::destroy shape, where the actual
+    // if/else lives one hop away from where $request->input() was read).
+    if (file && sc.requestParamArg) {
+      const branch = detectParamDrivenBranch(
+        join(projectRoot, file),
+        sc.method,
+        sc.requestParamArg.position,
+        sc.requestParamArg.requestParamName
+      )
+      if (branch) {
+        emitConditionalBranchNode(nodes, edges, id, branch, 0, namespaces, projectRoot, cache)
+      }
+    }
   }
 
   // A guard clause protects the calls that follow it in the same caller —
@@ -521,6 +570,68 @@ function addServiceCallNodes(
 }
 
 /**
+ * Add ir:guard_clause nodes for same-class `$this->method()` self-calls whose
+ * target is itself a guard clause (IR v1.5 Phase 4, same-class self-call
+ * extension). Normal property-based service calls run guard detection
+ * inside addServiceCallNodes, but a same-class self-call like
+ * `$this->ensureDeletable($user)` never becomes a ServiceCall node at all —
+ * it's handled by controller-parser.ts's private-method flattening instead,
+ * which is why this needed a separate emission path (found via real-repo
+ * regression check: BookStack's ensureDeletable() is called exactly this
+ * way from inside UserRepo::destroy() and was invisible in the graph).
+ *
+ * Each self-guard node guards every node in `protectedNodes` — the other
+ * calls made by the same caller.
+ */
+function addSelfGuardClauseNodes(
+  nodes: ExecutionNode[],
+  edges: ExecutionEdge[],
+  callerNodeId: string,
+  callerFile: string,
+  classShortName: string,
+  selfGuardCalls: import("./controller-parser.js").SelfGuardCall[],
+  protectedNodes: ExecutionNode[]
+): ExecutionNode[] {
+  const created: ExecutionNode[] = []
+
+  selfGuardCalls.forEach((sg, idx) => {
+    const id = `guard_${callerNodeId}_${idx}`.replace(/[^a-z0-9_]/gi, "_")
+    if (nodes.some((n) => n.id === id)) return
+
+    const node: ExecutionNode = {
+      id,
+      type:   IR_NODE_TYPES.GUARD_CLAUSE,
+      symbol: `${classShortName}::${sg.methodName}`,
+      role:   "guard",
+      file:   callerFile,
+      ...(sg.conditionText ? { detail: sg.conditionText } : {}),
+    }
+    nodes.push(node)
+    created.push(node)
+
+    edges.push({
+      from:         callerNodeId,
+      to:           id,
+      relation:     "calls",
+      traceability: "semantic",
+    })
+  })
+
+  for (const guardNode of created) {
+    for (const protectedNode of protectedNodes) {
+      edges.push({
+        from:         guardNode.id,
+        to:           protectedNode.id,
+        relation:     IR_EDGE_RELATIONS.GUARDS,
+        traceability: "semantic",
+      })
+    }
+  }
+
+  return created
+}
+
+/**
  * Add ir:conditional_branch nodes for request-parameter-driven if/else found
  * in the caller's method, plus the then/else calls as their own nodes with
  * explicit ir:controls edges from the branch — "this call only executes in
@@ -531,41 +642,61 @@ function addConditionalBranchNodes(
   nodes: ExecutionNode[],
   edges: ExecutionEdge[],
   callerNodeId: string,
-  branches: import("./controller-parser.js").ConditionalBranch[],
+  branches: ConditionalBranch[],
   namespaces: Record<string, string>,
   projectRoot: string,
   cache: ParseCache<unknown> | null
 ): void {
   branches.forEach((branch, idx) => {
-    const id = `branch_${callerNodeId}_${idx}`.replace(/[^a-z0-9_]/gi, "_")
-    if (nodes.some((n) => n.id === id)) return
-
-    nodes.push({
-      id,
-      type:   IR_NODE_TYPES.CONDITIONAL_BRANCH,
-      symbol: branch.conditionText,
-      role:   "control_flow",
-      detail: branch.paramName,
-    })
-    edges.push({
-      from:         callerNodeId,
-      to:           id,
-      relation:     "calls",
-      traceability: "static",
-    })
-
-    const thenNodes = addServiceCallNodes(nodes, edges, id, branch.thenCalls, namespaces, projectRoot, cache)
-    const elseNodes = addServiceCallNodes(nodes, edges, id, branch.elseCalls, namespaces, projectRoot, cache)
-
-    for (const n of [...thenNodes, ...elseNodes]) {
-      edges.push({
-        from:         id,
-        to:           n.id,
-        relation:     IR_EDGE_RELATIONS.CONTROLS,
-        traceability: "semantic",
-      })
-    }
+    emitConditionalBranchNode(nodes, edges, callerNodeId, branch, idx, namespaces, projectRoot, cache)
   })
+}
+
+/**
+ * Emit a single ir:conditional_branch node under `callerNodeId`, plus its
+ * then/else calls with explicit ir:controls edges. Shared by same-method
+ * detection (addConditionalBranchNodes) and the cross-method extension in
+ * addServiceCallNodes (branch found one hop inside a directly-called
+ * service method — see detectParamDrivenBranch).
+ */
+function emitConditionalBranchNode(
+  nodes: ExecutionNode[],
+  edges: ExecutionEdge[],
+  callerNodeId: string,
+  branch: ConditionalBranch,
+  idx: number,
+  namespaces: Record<string, string>,
+  projectRoot: string,
+  cache: ParseCache<unknown> | null
+): void {
+  const id = `branch_${callerNodeId}_${idx}`.replace(/[^a-z0-9_]/gi, "_")
+  if (nodes.some((n) => n.id === id)) return
+
+  nodes.push({
+    id,
+    type:   IR_NODE_TYPES.CONDITIONAL_BRANCH,
+    symbol: branch.conditionText,
+    role:   "control_flow",
+    detail: branch.paramName,
+  })
+  edges.push({
+    from:         callerNodeId,
+    to:           id,
+    relation:     "calls",
+    traceability: "static",
+  })
+
+  const thenNodes = addServiceCallNodes(nodes, edges, id, branch.thenCalls, namespaces, projectRoot, cache)
+  const elseNodes = addServiceCallNodes(nodes, edges, id, branch.elseCalls, namespaces, projectRoot, cache)
+
+  for (const n of [...thenNodes, ...elseNodes]) {
+    edges.push({
+      from:         id,
+      to:           n.id,
+      relation:     IR_EDGE_RELATIONS.CONTROLS,
+      traceability: "semantic",
+    })
+  }
 }
 
 const MAX_SERVICE_DEPTH  = 3
@@ -644,19 +775,22 @@ function expandServiceCalls(
 
     const filePath = join(projectRoot, scNode.file)
     const isoConv  = { tenantSignals: config.conventions.tenantSignals, tenantContainerKeys: config.conventions.tenantContainerKeys }
+    // Memoized by (filePath, method) — fetched once here and reused below so
+    // the transaction pass can resolve nested-service-call wraps edges.
+    const l1 = ctrlL1(cache, filePath, methodName)
 
     // Transaction pass inside service method
     try {
-      const txnResult = txnRes(cache, filePath)
+      const txnResult = txnRes(cache, filePath, methodName)
       if (txnResult.hasTransaction) {
-        addTransactionNodes(nodes, edges, scNode.id, txnResult.blocks)
+        addTransactionNodes(nodes, edges, scNode.id, txnResult.blocks, l1?.serviceCalls ?? [])
         budget.remaining -= txnResult.blocks.length * 3
       }
     } catch { /* file unreadable or parse error — skip gracefully */ }
 
     // Isolation/query pass inside service method
     try {
-      const isoResult = isoRes(cache, filePath, isoConv)
+      const isoResult = isoRes(cache, filePath, isoConv, methodName)
       addIsolationNodes(nodes, edges, scNode.id, isoResult)
       budget.remaining -= isoResult.modelQueries.length
     } catch { /* skip */ }
@@ -664,7 +798,7 @@ function expandServiceCalls(
     // Audit-log pass inside service method (IR v1.5 Phase 5)
     try {
       if (config.conventions.auditSinks.length > 0) {
-        const auditCalls = auditRes(cache, filePath, config.conventions.auditSinks)
+        const auditCalls = auditRes(cache, filePath, config.conventions.auditSinks, methodName)
         if (auditCalls.length > 0) {
           addAuditLogNodes(nodes, edges, scNode.id, auditCalls)
           budget.remaining -= auditCalls.length
@@ -674,13 +808,27 @@ function expandServiceCalls(
 
     // Deeper service calls from this service method
     try {
-      const l1 = ctrlL1(cache, filePath, methodName)
+      let newSvcNodes: ExecutionNode[] = []
       if (l1 && l1.serviceCalls.length > 0) {
-        const newSvcNodes = addServiceCallNodes(nodes, edges, scNode.id, l1.serviceCalls, config.namespaces, projectRoot, cache)
+        newSvcNodes = addServiceCallNodes(nodes, edges, scNode.id, l1.serviceCalls, config.namespaces, projectRoot, cache)
         budget.remaining -= newSvcNodes.length
         nextServiceNodes.push(
           ...newSvcNodes.filter((n) => !!n.file && matchesExpansionFocus(n, focus))
         )
+      }
+      // Same-method request-param branches found at this depth too — Phase 6
+      // previously only ran this pass at the top-level controller action.
+      if (l1 && l1.conditionalBranches.length > 0) {
+        addConditionalBranchNodes(nodes, edges, scNode.id, l1.conditionalBranches, config.namespaces, projectRoot, cache)
+        budget.remaining -= l1.conditionalBranches.length
+      }
+      // Same-class self-call guard clauses at this depth too (IR v1.5 Phase 4,
+      // same-class self-call extension) — e.g. UserRepo::destroy calling
+      // $this->ensureDeletable($user) one hop below the controller action.
+      if (l1 && l1.selfGuardCalls.length > 0) {
+        const [scClass] = scNode.symbol.split("::")
+        const guardNodes = addSelfGuardClauseNodes(nodes, edges, scNode.id, scNode.file, scClass ?? "", l1.selfGuardCalls, newSvcNodes)
+        budget.remaining -= guardNodes.length
       }
     } catch { /* skip */ }
   }
@@ -691,12 +839,21 @@ function expandServiceCalls(
 /**
  * Add transaction_boundary, transactional_write, and transaction_escape nodes
  * for each DB::transaction() block found in the controller file.
+ *
+ * @param callerServiceCalls The same caller's already-resolved service calls
+ * (from parseControllerMethod), used to link `ir:wraps` edges to service-call
+ * nodes that were called directly inside the transaction closure — e.g.
+ * `DB::transaction(fn () => $this->userRepo->create(...))`, where the real
+ * write happens one hop inside `UserRepo::create()`, not in the closure text
+ * itself (IR v1.5 Phase 3, nested-service-call extension — found via
+ * real-repo regression check on BookStack's `UserApiController::create`).
  */
 function addTransactionNodes(
   nodes: ExecutionNode[],
   edges: ExecutionEdge[],
   callerNodeId: string,
-  blocks: import("./transaction-parser.js").TransactionBlock[]
+  blocks: import("./transaction-parser.js").TransactionBlock[],
+  callerServiceCalls: ServiceCall[] = []
 ): void {
   blocks.forEach((block, blockIdx) => {
     const txnId = `txn_${callerNodeId}_${blockIdx}`
@@ -755,6 +912,24 @@ function addTransactionNodes(
         traceability: "static",
       })
     })
+
+    // Nested service calls made directly inside the closure — wrap the
+    // already-created service-call node for each one that resolves, instead
+    // of only pattern-matched raw writes (IR v1.5 Phase 3 extension).
+    for (const nc of block.nestedServiceCalls) {
+      const match = callerServiceCalls.find(
+        (sc) => sc.method === nc.method && (nc.propertyName === "" || sc.propertyName === nc.propertyName)
+      )
+      if (!match) continue
+      const targetId = serviceCallNodeId(match, callerNodeId)
+      if (!nodes.some((n) => n.id === targetId)) continue
+      edges.push({
+        from:         txnId,
+        to:           targetId,
+        relation:     IR_EDGE_RELATIONS.WRAPS,
+        traceability: "semantic",
+      })
+    }
   })
 }
 

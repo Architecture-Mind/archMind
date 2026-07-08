@@ -54,4 +54,18 @@ class UserController
 
         return response()->json(['migrated' => true]);
     }
+
+    // Replicates BookStack's REAL shape (found via real-repo regression check,
+    // not the collapsed single-method fixture above): the controller reads
+    // the request param and hands it straight to a service method as an
+    // argument — the if/else keyed on it lives one hop away, inside the
+    // callee, not in this method (IR v1.5 Phase 6, cross-method extension).
+    public function deleteWithTransfer(Request $request, User $user): JsonResponse
+    {
+        $transferToId = $request->input('transfer_to_id', null);
+
+        $this->userRepo->destroyAndTransfer($user, $transferToId);
+
+        return response()->json(['deleted' => true]);
+    }
 }

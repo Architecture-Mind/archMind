@@ -374,13 +374,34 @@ export function resolveAliasMap(projectRoot: string, config: ProjectConfig): Res
 }
 
 /**
- * Resolve app/Providers/RouteServiceProvider.php's Route::group() wrapping (if present)
+ * Locate RouteServiceProvider.php. Tries the standard Laravel skeleton path
+ * first (fast path for the overwhelming majority of projects), then falls
+ * back to a bounded search under app/ for projects that nest their app code
+ * under an extra namespace directory (e.g. BookStack's
+ * app/App/Providers/RouteServiceProvider.php, found via real-repo regression
+ * check — the hardcoded standard path silently missed it and every BookStack
+ * API route lost its middleware resolution as a result — IR v1.5 Phase 1 fix).
+ */
+function findRouteServiceProviderPath(projectRoot: string): string | null {
+  const standardPath = join(projectRoot, "app", "Providers", "RouteServiceProvider.php")
+  if (existsSync(standardPath)) return standardPath
+
+  const appDir = join(projectRoot, "app")
+  if (!existsSync(appDir)) return null
+
+  const candidates: string[] = []
+  walkDir(appDir, ".php", candidates)
+  return candidates.find((abs) => basename(abs) === "RouteServiceProvider.php") ?? null
+}
+
+/**
+ * Resolve RouteServiceProvider.php's Route::group() wrapping (if present)
  * into concrete middleware per route file, using Kernel.php's $middlewareGroups to expand
  * bare group names (e.g. "api") into their concrete middleware class list.
  */
 function resolveRouteServiceProviderWrapping(projectRoot: string, kernelPath: string): Map<string, string[]> {
-  const rspPath = join(projectRoot, "app", "Providers", "RouteServiceProvider.php")
-  if (!existsSync(rspPath)) return new Map()
+  const rspPath = findRouteServiceProviderPath(projectRoot)
+  if (!rspPath) return new Map()
 
   const middlewareGroups = parseMiddlewareGroups(kernelPath)
   const wrapping = parseRouteServiceProvider(rspPath, projectRoot)
