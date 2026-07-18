@@ -1,8 +1,8 @@
 # ArchMind
 
-**Semantic execution graph engine for Laravel — built for AI assistants and CI.**
+**Semantic execution graph engine for Laravel, NestJS, and Spring Boot — built for AI assistants and CI.**
 
-ArchMind parses your Laravel app into a structured execution graph and gives AI assistants (Claude, Cursor, Copilot) the minimal relevant subgraph for a query — achieving higher answer quality at a fraction of the tokens that naive file-dump RAG uses.
+ArchMind parses your app into a structured execution graph and gives AI assistants (Claude, Cursor, Copilot) the minimal relevant subgraph for a query — achieving comparable or better answer quality at a fraction of the tokens that naive file-dump RAG uses.
 
 ---
 
@@ -10,10 +10,20 @@ ArchMind parses your Laravel app into a structured execution graph and gives AI 
 
 Naive RAG dumps raw source files into the LLM context. ArchMind retrieves only the nodes relevant to the question — authentication gates, policy checks, transaction boundaries, tenant isolation — and nothing else.
 
-| Approach | LLM answer quality | Token usage |
-|----------|-------------------|-------------|
-| ArchMind (execution graph) | **0.75** | baseline |
-| Naive RAG (file dump) | 0.63 | 3–15× more |
+### Benchmark results (real repos, hand-verified ground truth, real GPT-4o calls — not simulated)
+
+| Benchmark | Sample | archMind | Baseline (raw file dump) |
+|---|---|---|---|
+| Guest-access / authorization accuracy — 5 real Laravel apps (invoiceninja, monica, akaunting, koel, BookStack) | 50 hand-verified entrypoints | 66% correct, 98% correct+partial | 68% correct, 100% correct+partial |
+| Token cost, same benchmark | 50 entrypoints | **5.08× fewer prompt tokens** (14,517 vs 73,712) | baseline |
+| Guest-access / authorization accuracy — 5 fresh, previously-unseen repos across Laravel/Spring Boot/NestJS (panel, attendize, spring-petclinic, SpringBlade, nestjs-boilerplate) | 20 entrypoints | **90% correct** (18/20), 0 incorrect | 65% correct (13/20), 5 confidently incorrect |
+| Token cost, same cross-framework set | 24 calls | **73.4% fewer prompt tokens** (7,116 vs 26,764) | baseline |
+
+**Read the accuracy numbers honestly:** on Laravel alone, raw accuracy is statistically tied with a naive file dump — the win there is almost entirely token efficiency (same answer quality, 1/5th the context). The larger accuracy edge shows up on the cross-framework sample, and traces to a specific mechanism, not "the LLM likes archMind more": ArchMind's evidence package marks facts as explicitly **present or ABSENT** (e.g. `✗ auth_middleware`), which lets the model correctly infer "no auth required" instead of reading silence as ambiguity — a raw file dump gives the model no equivalent signal to reason from, so it hedges to `UNCLEAR` far more often (5 of the baseline's misses were exactly this).
+
+ArchMind's accuracy pass has also surfaced real, previously undocumented security issues in the repos it was tested against — including an unauthenticated multi-tenant data exposure and a path-traversal-adjacent unguarded file endpoint — precisely because the graph's explicit absence-marking caught missing auth that a raw-file read past over.
+
+**Where it doesn't win:** deeper reasoning benchmarks (cross-file causality, multi-turn sessions) show archMind edging ahead but with concrete, documented gaps — transaction-scope flattening (the graph knows *a* transaction exists but not precisely which downstream calls are inside it) and an accessor-vs-terminal-mutation gap (a relationship accessor is captured as touched, without confirming the chained `.delete()` on it actually ran). These are IR-granularity ceilings, not retrieval-reach problems, and are being worked on incrementally rather than glossed over.
 
 The difference compounds on large codebases where a single route touches dozens of files.
 
@@ -162,7 +172,9 @@ DELETE /api/vaults/{id}
 
 ---
 
-## Supported Laravel patterns
+## Supported frameworks
+
+### Laravel
 
 - Route groups with nested middleware inheritance
 - `Route::apiResource()` / `Route::resource()` with `.only()` / `.except()`
@@ -172,12 +184,28 @@ DELETE /api/vaults/{id}
 - Event → listener tracing via `EventServiceProvider::$listen`
 - Kernel aliases (Laravel ≤10) and `bootstrap/app.php` (Laravel 11/12)
 
+### Spring Boot
+
+- HTTP routes (`@RestController`/`@Controller` + method-level `@*Mapping`), including custom stereotypes that skip the standard annotation but still carry method-level mappings (e.g. Spring Boot Admin's `@AdminController`)
+- Multi-module Maven projects, at arbitrary nesting depth — and Gradle multi-module via `settings.gradle`
+- Non-HTTP entrypoints: `@KafkaListener`/`@RabbitListener`/`@JmsListener` (queue) and `@Scheduled` (cron)
+- `@PreAuthorize`/`@Secured`/`@RolesAllowed` and role/permission checks (`hasRole`, `hasAuthority`) resolved to both an auth gate and an authorization check
+- `SecurityFilterChain` rule resolution, scoped per Maven module so an unrelated module's security config can't leak onto your controllers
+- `@Transactional` resolved through the interface/impl split, scoped per module
+- Unrecognized but auth-shaped custom annotations (e.g. SpringBlade's `@PreAuth`, Apache Shiro's `@RequiresRoles`) are surfaced as an explicit "unknown security signal" rather than silently read as no-auth
+
+### NestJS
+
+- Controller decorators and route method mapping
+- `@Cron` (`@nestjs/schedule`) jobs as first-class cron entrypoints
+- Route-constants object references resolved in decorator arguments
+
 ---
 
 ## Requirements
 
 - Node.js ≥ 18
-- A Laravel project (≥8, tested on 10/11/12)
+- A Laravel (≥8, tested on 10/11/12), NestJS, or Spring Boot (Maven or Gradle) project
 
 ## License
 
