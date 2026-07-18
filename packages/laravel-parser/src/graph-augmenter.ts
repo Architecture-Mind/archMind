@@ -1,5 +1,5 @@
 import { join } from "path"
-import { existsSync } from "fs"
+import { existsSync, readFileSync } from "fs"
 import type {
   IntermediateExecutionGraph,
   ExecutionNode,
@@ -296,13 +296,29 @@ export function augmentGraph(
   }
 
   // ---- Permission constant pass ----------------------------------------
+  // permFiles is inferred project-wide (any *Permission*.php under app/), not scoped to
+  // this route — emitting every constant from every such file regardless of relevance
+  // let an LLM mistake "PermissionStatus is defined somewhere in this project" for "this
+  // route enforces a permission check" (found on BookStack's GET /status, a genuinely
+  // public route). Only emit constants for a permission class that's actually referenced
+  // by name in a file already reachable from this route (controller, service calls,
+  // middleware, FormRequest, etc. — i.e. everything collected into newNodes so far).
+  const reachableSource = [...new Set(newNodes.map((n) => n.file).filter((f): f is string => !!f))]
+    .map((relFile) => {
+      try { return readFileSync(join(opts.projectRoot, relFile), "utf-8") } catch { return "" }
+    })
+    .join("\n")
+
   for (const relFile of permFiles) {
     const absPath = join(opts.projectRoot, relFile)
     const map = parseConstantClass(absPath)
-    const permNodes = extractPermissionNodes(map, relFile)
-    const permEdges = buildHierarchyEdges(permNodes)
-    newNodes.push(...permNodes)
-    newEdges.push(...permEdges)
+    for (const [className, constants] of Object.entries(map)) {
+      if (!reachableSource.includes(`${className}::`)) continue
+      const permNodes = extractPermissionNodes({ [className]: constants }, relFile)
+      const permEdges = buildHierarchyEdges(permNodes)
+      newNodes.push(...permNodes)
+      newEdges.push(...permEdges)
+    }
   }
 
   // ---- Transaction pass ------------------------------------------------
