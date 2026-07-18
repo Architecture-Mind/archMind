@@ -28,7 +28,7 @@ function baseMethod(overrides: Partial<SpringControllerMethod> = {}): SpringCont
 
 describe("emitGraph — entrypoint descriptor", () => {
   test("populates graph.source with a framework-agnostic HTTP entrypoint descriptor", () => {
-    const graph = emitGraph(baseMethod({ httpMethod: "POST", path: "/orders" }))
+    const graph = emitGraph(baseMethod({ httpMethod: "POST", path: "/orders" }), "")
     expect(graph.source).toEqual({
       type:     "http",
       id:       "POST /orders",
@@ -42,7 +42,7 @@ describe("emitGraph — auth annotation classification", () => {
   test("isAuthOnly annotation emits only an auth_gate node", () => {
     const graph = emitGraph(baseMethod({
       authAnnotations: [{ kind: "preAuthorize", expression: "isAuthenticated()", isAuthOnly: true }],
-    }))
+    }), "")
     const types = graph.nodes.map((n) => n.type)
     expect(types).toContain(IR_NODE_TYPES.AUTH_GATE)
     expect(types).not.toContain(IR_NODE_TYPES.AUTHZ_CHECK)
@@ -51,7 +51,7 @@ describe("emitGraph — auth annotation classification", () => {
   test("a role-based @PreAuthorize implies authentication — emits BOTH auth_gate and authz_check", () => {
     const graph = emitGraph(baseMethod({
       authAnnotations: [{ kind: "preAuthorize", expression: "hasRole('ADMIN')", isAuthOnly: false }],
-    }))
+    }), "")
     const types = graph.nodes.map((n) => n.type)
     expect(types).toContain(IR_NODE_TYPES.AUTH_GATE)
     expect(types).toContain(IR_NODE_TYPES.AUTHZ_CHECK)
@@ -67,7 +67,7 @@ describe("emitGraph — auth annotation classification", () => {
   test("@Secured role check also implies authentication", () => {
     const graph = emitGraph(baseMethod({
       authAnnotations: [{ kind: "secured", expression: "ROLE_ADMIN", isAuthOnly: false }],
-    }))
+    }), "")
     const types = graph.nodes.map((n) => n.type)
     expect(types).toContain(IR_NODE_TYPES.AUTH_GATE)
     expect(types).toContain(IR_NODE_TYPES.AUTHZ_CHECK)

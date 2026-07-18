@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto"
+import { relative } from "path"
 import type { IntermediateExecutionGraph, ExecutionNode, ExecutionEdge, EntrypointDescriptor } from "@kidkender/archmind-protocol"
 import { IR_NODE_TYPES, IR_EDGE_RELATIONS, IR_VERSION } from "@kidkender/archmind-protocol"
 import type { SpringControllerMethod, AuthAnnotation } from "./types.js"
@@ -7,7 +8,7 @@ import type { SpringControllerMethod, AuthAnnotation } from "./types.js"
 // Emit one IntermediateExecutionGraph per SpringControllerMethod
 // ---------------------------------------------------------------------------
 
-export function emitGraph(m: SpringControllerMethod): IntermediateExecutionGraph {
+export function emitGraph(m: SpringControllerMethod, projectRoot: string): IntermediateExecutionGraph {
   const nodes: ExecutionNode[] = []
   const edges: ExecutionEdge[] = []
 
@@ -54,7 +55,10 @@ export function emitGraph(m: SpringControllerMethod): IntermediateExecutionGraph
   // ------------------------------------------------------------------
   // 3. Business handler (controller method)
   // ------------------------------------------------------------------
-  const handler = node(IR_NODE_TYPES.BUSINESS_HANDLER, `${m.className}::${m.methodName}`)
+  const handler = node(IR_NODE_TYPES.BUSINESS_HANDLER, `${m.className}::${m.methodName}`, {
+    file: relative(projectRoot, m.filePath).replace(/\\/g, "/"),
+    line: m.methodLine,
+  })
 
   // Wire: guards → handler
   for (const gid of guardIds) edge(gid, handler.id, "ir:guards")

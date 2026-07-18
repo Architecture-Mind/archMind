@@ -25,7 +25,7 @@ export class SpringBootAdapter implements SemanticAdapter {
       try {
         const methods = parseControllerFile(file, baseClassIndex)
         for (const m of methods) {
-          const graph = emitGraph(m)
+          const graph = emitGraph(m, root)
           injectSecurityNodes(graph, securityRules)
           injectServiceTransactionNodes(graph, txnIndex)
           graphs.push(graph)
