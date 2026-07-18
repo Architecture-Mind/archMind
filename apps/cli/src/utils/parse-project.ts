@@ -117,13 +117,14 @@ export function parseProject(projectRoot: string): ParsedProject {
 
   // Default: Laravel
   const config = loadProjectConfig(projectRoot)
-  const { aliasMap, routeFiles, routeWrapping, routeNamespaceWrapping } = resolveAliasMap(projectRoot, config)
+  const { aliasMap, routeFiles, routeWrapping, routeNamespaceWrapping, routePrefixWrapping } = resolveAliasMap(projectRoot, config)
 
   const graphs: IntermediateExecutionGraph[] = []
   for (const relFile of routeFiles) {
     const wrappingMiddleware = routeWrapping.get(relFile)
     const wrappingNamespace = routeNamespaceWrapping.get(relFile)
-    const skeletons = parseRouteFile(join(projectRoot, relFile), { aliasMap, namespaces: config.namespaces, wrappingMiddleware, wrappingNamespace })
+    const wrappingPrefix = routePrefixWrapping.get(relFile)
+    const skeletons = parseRouteFile(join(projectRoot, relFile), { aliasMap, namespaces: config.namespaces, wrappingMiddleware, wrappingNamespace, wrappingPrefix })
     for (const g of skeletons) {
       graphs.push(augmentGraph(g, { projectRoot, config }))
     }
