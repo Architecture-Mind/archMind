@@ -1,4 +1,5 @@
 import { readFileSync } from "fs"
+import { dirname } from "path"
 
 /**
  * A resolved security rule from a SecurityFilterChain bean.
@@ -12,6 +13,25 @@ export interface SecurityRule {
   // requires authentication first, so "role" rules resolve to [auth_gate, authz_check],
   // not just [authz_check] — otherwise `no-auth` queries false-negative on protected routes.
   irAuthTypes:   Array<"ir:auth_gate" | "ir:authz_check">
+  // Maven module root this rule's SecurityFilterChain was declared in (the directory
+  // containing that file's src/main/java tree). A rule only applies to controllers in
+  // the SAME module — a demo/sample module's security config must not leak onto an
+  // unrelated library module just because both are nested under one multi-module root.
+  sourceModule:  string
+}
+
+/**
+ * The Maven module root for a Java source file: the ancestor directory whose
+ * child chain is `src/main/java`. Falls back to the file's own directory when
+ * that convention isn't found (flat/unusual layouts).
+ */
+export function moduleRootOf(filePath: string): string {
+  const marker = /[\\/]src[\\/]main[\\/]java[\\/]/
+  const m = marker.exec(filePath)
+  // Fall back to the containing directory (not the file itself) so files that
+  // share a flat directory — real unusual layouts, and every flat test fixture —
+  // are still correctly treated as the same module rather than each isolated.
+  return m ? filePath.slice(0, m.index) : dirname(filePath)
 }
 
 /**
@@ -38,7 +58,8 @@ export function parseSecurityConfigs(javaFiles: string[]): SecurityRule[] {
       continue
     }
 
-    rawRules.push(...extractRulesFromSource(src))
+    const sourceModule = moduleRootOf(file)
+    for (const r of extractRulesFromSource(src)) rawRules.push({ ...r, sourceModule })
   }
 
   // Sort: most-specific (fewest wildcards, longer literal prefix) first
@@ -75,8 +96,10 @@ function specificityScore(pattern: string): number {
 // Rule extraction from a single source file
 // ---------------------------------------------------------------------------
 
-function extractRulesFromSource(src: string): SecurityRule[] {
-  const rules: SecurityRule[] = []
+type UnscopedRule = Omit<SecurityRule, "sourceModule">
+
+function extractRulesFromSource(src: string): UnscopedRule[] {
+  const rules: UnscopedRule[] = []
 
   // Find all .requestMatchers(...).hasRole/hasAnyRole/permitAll/denyAll patterns
   // We use a sliding window regex over the source
@@ -139,7 +162,7 @@ function extractPatterns(rawArgs: string): string[] {
 function buildRule(
   authFn: string,
   authArgs: string,
-): Omit<SecurityRule, "pattern"> {
+): Omit<UnscopedRule, "pattern"> {
   switch (authFn) {
     case "permitAll":
       return { type: "permit", roles: [], irAuthTypes: [] }
@@ -193,14 +216,22 @@ function patternToRegex(pattern: string): RegExp {
 }
 
 /**
- * Find the first matching security rule for a given route path.
+ * Find the first matching security rule for a given route path, scoped to rules
+ * declared within `controllerModule`. A SecurityFilterChain in one Maven module
+ * (e.g. a demo/sample app) must not govern controllers in an unrelated module —
+ * even when both are nested under the same multi-module repo root.
  * Returns null if no rule matches (should not happen with anyRequest() catch-all).
  */
-export function matchSecurityRule(path: string, rules: SecurityRule[]): SecurityRule | null {
+export function matchSecurityRule(
+  path: string,
+  rules: SecurityRule[],
+  controllerModule: string,
+): SecurityRule | null {
   // Normalise: ensure leading slash
   const normPath = path.startsWith("/") ? path : "/" + path
+  const scoped = rules.filter((r) => r.sourceModule === controllerModule)
 
-  for (const rule of rules) {
+  for (const rule of scoped) {
     try {
       if (patternToRegex(rule.pattern).test(normPath)) return rule
     } catch {

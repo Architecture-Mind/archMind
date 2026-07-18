@@ -36,7 +36,7 @@ describe("buildServiceTransactionIndex — resolves @Transactional through the i
     const index = buildServiceTransactionIndex([iface, impl])
 
     // Controller injects the interface type "WithdrawalService", calls .withdraw(...)
-    expect(index.isTransactional("WithdrawalService", "withdraw")).toBe(true)
+    expect(index.isTransactional("WithdrawalService", "withdraw", dir)).toBe(true)
   })
 
   test("method-level @Transactional only covers the annotated method", () => {
@@ -49,8 +49,8 @@ describe("buildServiceTransactionIndex — resolves @Transactional through the i
     `)
     const index = buildServiceTransactionIndex([impl])
 
-    expect(index.isTransactional("OrderService", "createOrder")).toBe(true)
-    expect(index.isTransactional("OrderService", "listOrders")).toBe(false)
+    expect(index.isTransactional("OrderService", "createOrder", dir)).toBe(true)
+    expect(index.isTransactional("OrderService", "listOrders", dir)).toBe(false)
   })
 
   test("service with no @Transactional anywhere resolves to false", () => {
@@ -61,12 +61,12 @@ describe("buildServiceTransactionIndex — resolves @Transactional through the i
     `)
     const index = buildServiceTransactionIndex([impl])
 
-    expect(index.isTransactional("PlainService", "doThing")).toBe(false)
+    expect(index.isTransactional("PlainService", "doThing", dir)).toBe(false)
   })
 
   test("unresolvable field type (no matching class or interface) resolves to false", () => {
     const index = buildServiceTransactionIndex([])
-    expect(index.isTransactional("UnknownService", "anyMethod")).toBe(false)
+    expect(index.isTransactional("UnknownService", "anyMethod", dir)).toBe(false)
   })
 
   test("direct class name (no interface indirection) also resolves", () => {
@@ -77,6 +77,6 @@ describe("buildServiceTransactionIndex — resolves @Transactional through the i
       }
     `)
     const index = buildServiceTransactionIndex([impl])
-    expect(index.isTransactional("WalletService", "transfer")).toBe(true)
+    expect(index.isTransactional("WalletService", "transfer", dir)).toBe(true)
   })
 })

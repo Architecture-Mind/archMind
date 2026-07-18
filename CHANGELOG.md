@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-07-18
+
+### Added
+- Spring Boot (`@kidkender/archmind-springboot-parser` 0.4.0): unrecognized-but-auth-shaped annotations (SpringBlade's `@PreAuth`, Apache Shiro's `@RequiresRoles`/`@RequiresPermissions`/`@RequiresUser`/`@RequiresAuthentication`, and other common custom-framework security annotations) are now emitted as `ir:unknown_middleware` instead of being silently dropped — surfaces "there IS a security check here, but its exact shape is unknown" instead of the LLM reading absence-of-a-known-node as no-auth.
+- `@kidkender/archmind-explainer` 0.3.1: `buildEvidencePackage()` now surfaces `ir:unknown_middleware` as a fact (`unknown_security`, HIGH relevance for the `auth` intent). This node type already existed in the protocol (used by Laravel's middleware-mapper for unresolved middleware) but was never read by fact extraction — evidence packages silently swallowed every "honest don't know" signal before this fix, for both Laravel and Spring Boot.
+
+### Fixed
+- Spring Boot (`@kidkender/archmind-springboot-parser` 0.4.0): multi-module Maven scanner (`findJavaFiles`) now recurses to arbitrary depth instead of one level below the root — real multi-module repos nest modules deeper (e.g. `blade-service/blade-demo/src/main/java`). Confirmed on `chillzhuang/SpringBlade`: route extraction went from 9 to 182 routes (15 of 18 `src/main/java` trees were previously unscanned).
+- Spring Boot: controller classes using a custom stereotype instead of `@RestController`/`@Controller` (e.g. Spring Boot Admin's `@AdminController`, a plain marker annotation wired through a project-specific `HandlerMapping`) are now detected via method-level HTTP mapping annotations (`@GetMapping`/`@PostMapping`/etc.), which are a reliable signal on their own. Confirmed on `codecentric/spring-boot-admin`: 0 → 21 routes.
+- Spring Boot: `SecurityFilterChain` rule matching, `@Transactional` service-layer resolution, and inherited base-class URL-prefix resolution are now all scoped per Maven module (keyed by module root + simple name, not bare simple name). Fixes real cross-module leakage found via QA benchmarking: a demo/sample module's `SecurityFilterChain` was incorrectly gating controllers in an unrelated library module purely because both lived under the same multi-module repo root; the same unscoped-lookup pattern existed for `@Transactional` resolution and base-class path inheritance (confirmed via duplicate simple class names — e.g. two unrelated `NoticeServiceImpl` classes — in `SpringBlade`).
+- Spring Boot: `isSpringBootProject()` now follows the build manifest's own declared `<modules>` (Maven, recursively through nested aggregator POMs) / Gradle `include(...)` when the root `pom.xml`/`build.gradle` doesn't mention Spring at all, instead of only trusting the root file. Does not walk the filesystem generically — only manifest-declared module paths are checked, so an unrelated nested Java tool using Spring incidentally cannot misclassify a non-Spring-Boot repo.
+- `@kidkender/archmind` CLI: rebuilt and republished to ship the `archmind-springboot-parser` 0.4.0 and `archmind-explainer` 0.3.1 fixes above (both are bundled into the CLI's single build artifact).
+
 ## [0.7.0] - 2026-07-08
 
 ### Added

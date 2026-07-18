@@ -6,7 +6,7 @@ import { findJavaFiles, isEntrypointFile } from "./scanner.js"
 import { parseControllerFile } from "./controller-parser.js"
 import { emitGraph } from "./ir-emitter.js"
 import { buildBaseClassIndex } from "./inheritance-resolver.js"
-import { parseSecurityConfigs, matchSecurityRule, type SecurityRule } from "./security-config-parser.js"
+import { parseSecurityConfigs, matchSecurityRule, moduleRootOf, type SecurityRule } from "./security-config-parser.js"
 import { buildServiceTransactionIndex, type ServiceTransactionIndex } from "./service-transaction-index.js"
 
 export class SpringBootAdapter implements SemanticAdapter {
@@ -24,10 +24,11 @@ export class SpringBootAdapter implements SemanticAdapter {
     for (const file of controllerFiles) {
       try {
         const methods = parseControllerFile(file, baseClassIndex)
+        const controllerModule = moduleRootOf(file)
         for (const m of methods) {
           const graph = emitGraph(m, root)
-          injectSecurityNodes(graph, securityRules)
-          injectServiceTransactionNodes(graph, txnIndex)
+          injectSecurityNodes(graph, securityRules, controllerModule)
+          injectServiceTransactionNodes(graph, txnIndex, controllerModule)
           graphs.push(graph)
         }
       } catch {
@@ -47,14 +48,19 @@ export function parseSpringBootProject(root: string): IntermediateExecutionGraph
 // Post-emit: inject auth/authz nodes derived from SecurityFilterChain rules
 // ---------------------------------------------------------------------------
 
-function injectSecurityNodes(graph: IntermediateExecutionGraph, rules: SecurityRule[]): void {
-  // Only inject if the method has NO per-method auth annotations already
+function injectSecurityNodes(graph: IntermediateExecutionGraph, rules: SecurityRule[], controllerModule: string): void {
+  // Only inject if the method has NO per-method auth annotations already —
+  // including an unrecognized-but-known-to-exist one (ir:unknown_middleware).
+  // Guessing a SecurityFilterChain-derived gate on top of an unknown method-level
+  // annotation would overwrite an honest "don't know" with a confident wrong guess.
   const hasMethodAuth = graph.nodes.some(
-    (n) => n.type === IR_NODE_TYPES.AUTH_GATE || n.type === IR_NODE_TYPES.AUTHZ_CHECK,
+    (n) => n.type === IR_NODE_TYPES.AUTH_GATE ||
+           n.type === IR_NODE_TYPES.AUTHZ_CHECK ||
+           n.type === IR_NODE_TYPES.UNKNOWN_MIDDLEWARE,
   )
   if (hasMethodAuth || rules.length === 0) return
 
-  const rule = matchSecurityRule(graph.path, rules)
+  const rule = matchSecurityRule(graph.path, rules, controllerModule)
   if (!rule || rule.irAuthTypes.length === 0) return  // public endpoint or no match
 
   // Find the first node in the execution flow (typically validation gate or handler)
@@ -94,7 +100,7 @@ function injectSecurityNodes(graph: IntermediateExecutionGraph, rules: SecurityR
 // *Impl class, not the controller — see service-transaction-index.ts).
 // ---------------------------------------------------------------------------
 
-function injectServiceTransactionNodes(graph: IntermediateExecutionGraph, txnIndex: ServiceTransactionIndex): void {
+function injectServiceTransactionNodes(graph: IntermediateExecutionGraph, txnIndex: ServiceTransactionIndex, controllerModule: string): void {
   const serviceCallNodes = graph.nodes.filter((n) => n.type === IR_NODE_TYPES.SERVICE_CALL)
 
   for (const svcNode of serviceCallNodes) {
@@ -102,7 +108,7 @@ function injectServiceTransactionNodes(graph: IntermediateExecutionGraph, txnInd
     if (sep === -1) continue
     const fieldType = svcNode.symbol.slice(0, sep)
     const method    = svcNode.symbol.slice(sep + 2)
-    if (!txnIndex.isTransactional(fieldType, method)) continue
+    if (!txnIndex.isTransactional(fieldType, method, controllerModule)) continue
 
     const incoming = graph.edges.filter((e) => e.to === svcNode.id)
     if (incoming.length === 0) continue

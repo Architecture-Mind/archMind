@@ -14,6 +14,7 @@ export const FACT_RELEVANCE: Record<string, Record<string, RelevanceTier>> = {
     authz_check:      "high",
     ownership_check:  "high",
     permission:       "high",
+    unknown_security: "high",
     resource_bound:   "medium",
     form_request:     "low",
     txn_boundary:     "low",
@@ -92,6 +93,9 @@ export function extractFacts(
   const byType = (t: string) => graph.nodes.filter(n => n.type === t)
 
   const authGates    = byType("ir:auth_gate")
+  // Recognized-as-security-shaped but unclassified annotation (e.g. a custom
+  // framework's @PreAuth) — an honest "don't know", not evidence of no-auth.
+  const unknownSec   = byType("ir:unknown_middleware")
   // FormRequest nodes with ::authorize() count as delegated authz_check (not just validation)
   const explicitAuthz    = byType("ir:authz_check")
   const formReqAuthzNodes = byType("ir:validation_gate").filter(n =>
@@ -118,6 +122,7 @@ export function extractFacts(
 
   const raw: FactEntry[] = [
     fact("auth_middleware", authGates),
+    fact("unknown_security", unknownSec),
     fact("authz_check",     authzChecks),
     fact("ownership_check", ownershipNodes),
     fact("permission",      permissions),

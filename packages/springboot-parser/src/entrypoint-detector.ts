@@ -13,12 +13,21 @@ export interface EntrypointDetector {
   matchesSource(source: string): boolean
 }
 
+// Method-level mapping annotations are Spring MVC/WebFlux-specific and, in
+// practice, only ever appear on routing methods — so their presence alone is
+// a reliable HTTP-entrypoint signal, even on classes that skip the standard
+// @RestController/@Controller stereotype in favor of a custom one (e.g.
+// Spring Boot Admin's @AdminController, which carries no meta-annotations
+// and is wired up via a custom HandlerMapping instead).
+const HTTP_METHOD_MAPPING_ANNS = ["@GetMapping", "@PostMapping", "@PutMapping", "@DeleteMapping", "@PatchMapping"]
+
 export const httpEntrypointDetector: EntrypointDetector = {
   kind: "http",
   matchesSource(source: string): boolean {
+    if (HTTP_METHOD_MAPPING_ANNS.some((a) => source.includes(a))) return true
     return (
       (source.includes("@RestController") || source.includes("@Controller")) &&
-      (source.includes("Mapping") || source.includes("@RequestMapping"))
+      source.includes("@RequestMapping")
     )
   },
 }

@@ -6,7 +6,12 @@
 export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS"
 
 export interface AuthAnnotation {
-  kind:       "preAuthorize" | "secured" | "rolesAllowed"
+  // "unknown" = an auth-shaped annotation we can't classify (custom framework
+  // annotation, e.g. SpringBlade's @PreAuth or Shiro's @RequiresRoles) — emitted
+  // as ir:unknown_middleware instead of a guessed auth_gate/authz_check so the
+  // LLM sees "there IS a security signal here, but I can't tell you its shape"
+  // rather than silently reading it as no-auth.
+  kind:       "preAuthorize" | "secured" | "rolesAllowed" | "unknown"
   expression: string    // raw annotation value, e.g. "hasRole('ADMIN')"
   isAuthOnly: boolean   // true when the expression only checks isAuthenticated()
 }

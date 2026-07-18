@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync, rmSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
-import { parseSecurityConfigs, matchSecurityRule } from "../src/security-config-parser.js"
+import { parseSecurityConfigs, matchSecurityRule, moduleRootOf } from "../src/security-config-parser.js"
 
 function writeConfig(dir: string, content: string): string {
   const file = join(dir, "SecurityConfig.java")
@@ -34,7 +34,7 @@ describe("parseSecurityConfigs — role checks imply authentication", () => {
       }
     `)
     const rules = parseSecurityConfigs([file])
-    const rule  = matchSecurityRule("/api/public/orders", rules)
+    const rule  = matchSecurityRule("/api/public/orders", rules, moduleRootOf(file))
 
     expect(rule).not.toBeNull()
     expect(rule!.irAuthTypes).toEqual(["ir:auth_gate", "ir:authz_check"])
@@ -51,7 +51,7 @@ describe("parseSecurityConfigs — role checks imply authentication", () => {
       }
     `)
     const rules = parseSecurityConfigs([file])
-    const rule  = matchSecurityRule("/api/private/orders", rules)
+    const rule  = matchSecurityRule("/api/private/orders", rules, moduleRootOf(file))
 
     expect(rule!.irAuthTypes).toEqual(["ir:auth_gate", "ir:authz_check"])
   })
@@ -67,7 +67,7 @@ describe("parseSecurityConfigs — role checks imply authentication", () => {
       }
     `)
     const rules = parseSecurityConfigs([file])
-    const rule  = matchSecurityRule("/api/account/profile", rules)
+    const rule  = matchSecurityRule("/api/account/profile", rules, moduleRootOf(file))
 
     expect(rule!.irAuthTypes).toEqual(["ir:auth_gate"])
   })
@@ -83,7 +83,7 @@ describe("parseSecurityConfigs — role checks imply authentication", () => {
       }
     `)
     const rules = parseSecurityConfigs([file])
-    const rule  = matchSecurityRule("/actuator/health", rules)
+    const rule  = matchSecurityRule("/actuator/health", rules, moduleRootOf(file))
 
     expect(rule!.irAuthTypes).toEqual([])
   })

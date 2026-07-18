@@ -1,0 +1,70 @@
+[
+  {
+    "id": "SPRINGBLADE-USER-001",
+    "entrypoint": "GET /user/detail",
+    "golden_answer": "NO guest access; extra authorization IS required. The method carries @PreAuth(RoleConstant.HAS_ROLE_ADMIN) — a SpringBlade-custom annotation (org.springblade.core.secure.annotation.PreAuth), not Spring Security's standard @PreAuthorize. It requires an authenticated caller with the ADMIN role.",
+    "baseline": {
+      "answer": "An unauthenticated (guest) user cannot successfully call the `GET /user/detail` endpoint. This endpoint is protected by the `@PreAuth` annotation with the condition `RoleConstant.HAS_ROLE_ADMIN`, which indicates that users must have an administrator role to access it. Therefore, besides basic authentication, there is an additional authorization check that requires the user to have the administrative role to call this endpoint.",
+      "tokens": 2386,
+      "score": 1,
+      "reasoning": "The candidate answer is factually accurate, complete, and specific, correctly addressing guest access, extra authorization, and the use of the @PreAuth annotation with the required ADMIN role."
+    },
+    "archmind": {
+      "answer": "An unauthenticated (guest) user cannot successfully call this endpoint because the presence of `@PreAuth` implies that some form of pre-authorization check is in place, which likely requires at least basic authentication.\n\nBeyond basic authentication, there is no other authorization check required to use this endpoint. This is inferred from the absence of explicit authorization checks like `auth_middleware`, `authz_check`, `ownership_check`, and `permission`.",
+      "tokens": 178,
+      "score": 0.3,
+      "reasoning": "The candidate incorrectly states that no additional authorization beyond basic auth is required and fails to mention the specific requirement of the ADMIN role via the @PreAuth annotation."
+    }
+  },
+  {
+    "id": "SPRINGBLADE-LOGAPI-001",
+    "entrypoint": "GET /api/detail",
+    "golden_answer": "NO guest access; extra authorization IS required. @PreAuth(RoleConstant.HAS_ROLE_ADMIN) gates this method — requires an authenticated ADMIN-role caller, same custom SpringBlade annotation as UserController.",
+    "baseline": {
+      "answer": "An unauthenticated (guest) user cannot successfully call this endpoint. The `@PreAuth(RoleConstant.HAS_ROLE_ADMIN)` annotation is applied to the `detail` endpoint, which indicates that the endpoint requires the caller to have an admin role for authorization. This means that beyond basic authentication, the user must also have the appropriate admin role to access this endpoint. Without authentication and the necessary role, access will be denied.",
+      "tokens": 692,
+      "score": 1,
+      "reasoning": "The candidate answer accurately states that guest access is not possible and that extra authorization via `@PreAuth(RoleConstant.HAS_ROLE_ADMIN)` is required, covering all key points specifically."
+    },
+    "archmind": {
+      "answer": "An unauthenticated (guest) user cannot successfully call this endpoint because the presence of `@PreAuth` indicates that an authentication check is in place. There is no separate authorization check required beyond basic authentication, as there is no evidence of `authz_check`, `ownership_check`, or `permission` being present.",
+      "tokens": 177,
+      "score": 0.3,
+      "reasoning": "The candidate answer correctly identifies that guest access is not allowed but incorrectly states there is no extra authorization needed, failing to mention the specific requirement of an ADMIN role via @PreAuth."
+    }
+  },
+  {
+    "id": "SPRINGBOOTADMIN-APPS-001",
+    "entrypoint": "GET /applications",
+    "golden_answer": "YES, guest access is allowed; NO extra authorization. spring-boot-admin-server ships with no built-in Spring Security config in this module — the class uses only the custom @AdminController marker + @ResponseBody, no @PreAuthorize/@Secured/@RolesAllowed and no SecurityFilterChain in this source tree. Auth is opt-in and configured downstream by the consuming application, not present here.",
+    "baseline": {
+      "answer": "Based on the provided source code, there is no authentication or authorization mechanism implemented in the `ApplicationsController` class. The endpoint `GET /applications` does not have any annotations or logic enforcing authentication or authorization checks. Thus, an unauthenticated (guest) user can successfully call this endpoint. Moreover, there is no indication of any authorization checks beyond basic authentication required to use this endpoint, as no such logic is present in the code snippet provided.",
+      "tokens": 847,
+      "score": 0.7,
+      "reasoning": "The candidate answer correctly states that guest access is allowed and that no extra authorization checks are present, but it lacks specificity by not mentioning the lack of Spring Security config or the custom @AdminController marker."
+    },
+    "archmind": {
+      "answer": "No, an unauthenticated (guest) user cannot successfully call this endpoint, as basic authentication is present. However, there is no authorization check beyond basic authentication required to use it, as no authorization checks or permissions were found in the provided facts.",
+      "tokens": 166,
+      "score": 0.3,
+      "reasoning": "The candidate incorrectly states that unauthenticated users cannot access the endpoint, missing the opt-in nature of authentication in Spring Boot Admin; it correctly notes the absence of further authorization checks but lacks specificity regarding annotations."
+    }
+  },
+  {
+    "id": "SPRINGBOOTADMIN-APPS-002",
+    "entrypoint": "DELETE /applications/{name}",
+    "golden_answer": "YES, guest access is allowed; NO extra authorization. Same controller/module as GET /applications — no security annotations or filter chain present in this source tree; deregistering an application is unauthenticated by default in this library code.",
+    "baseline": {
+      "answer": "Based on the provided source code, there is no explicit authentication or authorization checks implemented within the `ApplicationsController` class or the DELETE endpoint itself. Spring Security or any other security configuration is not shown in the provided code, so the behavior of whether an unauthenticated (guest) user can successfully call this endpoint would depend on the global security configuration of the Spring Boot application outside of this file.\n\nWithout additional security configurations (e.g., security filters, annotations like `@PreAuthorize`, or configurations in `WebSecurityConfigurerAdapter`), an unauthenticated user could potentially call this endpoint since the code itself does not restrict access.\n\nSeparately, since there are no authorization checks described specifically for this endpoint in the code given (such as roles or permissions checks), there do not appear to be additional authorization checks beyond what may be configured globally for the application.",
+      "tokens": 849,
+      "score": 0.8,
+      "reasoning": "The candidate answer is factually accurate and covers key points about the lack of security checks but lacks specificity about the same controller/module and does not affirm guest access is allowed by default."
+    },
+    "archmind": {
+      "answer": "Based on the provided facts, an unauthenticated (guest) user cannot successfully call the endpoint. There is no evidence of an authorization check beyond basic authentication, as all relevant security checks (such as auth_middleware, authz_check, ownership_check, and permission) are absent.",
+      "tokens": 163,
+      "score": 0.3,
+      "reasoning": "The candidate answer incorrectly states that guest users cannot access the endpoint, fails to mention the lack of security annotations, but accurately notes the absence of additional authorization checks."
+    }
+  }
+]

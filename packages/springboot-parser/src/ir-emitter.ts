@@ -27,6 +27,15 @@ export function emitGraph(m: SpringControllerMethod, projectRoot: string): Inter
   // ------------------------------------------------------------------
   const guardIds: string[] = []
   for (const ann of m.authAnnotations) {
+    if (ann.kind === "unknown") {
+      // Don't guess: an unrecognized auth-shaped annotation is neither an
+      // auth_gate nor an authz_check we can name — surface it as-is so the
+      // LLM sees "there IS a security signal, but its shape is unknown"
+      // instead of silently reading absence-of-known-node as no-auth.
+      const n = node(IR_NODE_TYPES.UNKNOWN_MIDDLEWARE, ann.expression)
+      guardIds.push(n.id)
+      continue
+    }
     if (ann.isAuthOnly) {
       const n = node(IR_NODE_TYPES.AUTH_GATE, formatAuthSymbol(ann))
       guardIds.push(n.id)
@@ -219,5 +228,7 @@ function formatAuthSymbol(ann: AuthAnnotation): string {
     case "preAuthorize": return `@PreAuthorize("${ann.expression}")`
     case "secured":      return `@Secured("${ann.expression}")`
     case "rolesAllowed": return `@RolesAllowed("${ann.expression}")`
+    // "unknown" is handled earlier (emitted as ir:unknown_middleware) and never reaches here.
+    case "unknown":      return ann.expression
   }
 }

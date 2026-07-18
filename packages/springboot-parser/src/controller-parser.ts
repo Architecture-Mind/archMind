@@ -2,6 +2,7 @@ import { readFileSync } from "fs"
 import Parser from "tree-sitter"
 // @ts-ignore
 import Java from "tree-sitter-java"
+import { moduleRootOf } from "./security-config-parser.js"
 import type {
   SpringControllerMethod, AuthAnnotation, ServiceCall, DataAccessCall, EventPublication, HttpMethod,
   MessagingEntrypointMetadata, ScheduledEntrypointMetadata,
@@ -80,8 +81,18 @@ export function parseControllerFile(
     const classMods = getModifiers(classNode)
     if (!classMods) continue
 
-    const isControllerClass = hasAnnotation(classMods, CONTROLLER_ANNS)
     const className = classNode.childForFieldName("name")?.text ?? "UnknownController"
+
+    // Parse each method
+    const classBody = classNode.childForFieldName("body") ??
+                      classNode.children.find((c) => c.type === "class_body")
+    if (!classBody) continue
+
+    // A class counts as a controller if it carries the standard stereotype
+    // OR if any of its methods carries an HTTP mapping annotation directly —
+    // this catches custom stereotypes (e.g. @AdminController) that route
+    // through a project-specific HandlerMapping instead of @RestController.
+    const isControllerClass = hasAnnotation(classMods, CONTROLLER_ANNS) || classHasHttpMappingMethod(classBody)
 
     // Resolve class-level path: own @RequestMapping OR inherited from base class
     let classPath = ""
@@ -92,8 +103,11 @@ export function parseControllerFile(
         const superclassText = classNode.childForFieldName("superclass")?.text ?? ""
         const baseClass = superclassText.replace(/^extends\s+/, "").trim() ||
                           (extractExtendsFromSource(source, className) ?? "")
-        if (baseClass && baseClassIndex.has(baseClass)) {
-          classPath = baseClassIndex.get(baseClass)!
+        // Module-scoped lookup: two unrelated modules may reuse the same base
+        // class name with different URL prefixes — only a same-module match counts.
+        const scopedKey = baseClass ? `${moduleRootOf(filePath)}::${baseClass}` : ""
+        if (scopedKey && baseClassIndex.has(scopedKey)) {
+          classPath = baseClassIndex.get(scopedKey)!
         }
       }
     }
@@ -102,11 +116,6 @@ export function parseControllerFile(
 
     // Collect injected fields: fieldName → className
     const injectedFields = extractInjectedFields(classNode)
-
-    // Parse each method
-    const classBody = classNode.childForFieldName("body") ??
-                      classNode.children.find((c) => c.type === "class_body")
-    if (!classBody) continue
 
     for (const methodNode of classBody.descendantsOfType("method_declaration")) {
       const mods = getModifiers(methodNode)
@@ -238,6 +247,14 @@ function unquote(s: string): string {
 // HTTP method + path extraction
 // ---------------------------------------------------------------------------
 
+function classHasHttpMappingMethod(classBody: Parser.SyntaxNode): boolean {
+  for (const methodNode of classBody.descendantsOfType("method_declaration")) {
+    const mods = getModifiers(methodNode)
+    if (mods && getHttpMethod(mods)) return true
+  }
+  return false
+}
+
 function getHttpMethod(modifiers: Parser.SyntaxNode): HttpMethod | null {
   for (const child of modifiers.children) {
     if (child.type !== "annotation" && child.type !== "marker_annotation") continue
@@ -334,6 +351,20 @@ function normalizePath(classPath: string, methodPath: string): string {
 // Auth annotation extraction
 // ---------------------------------------------------------------------------
 
+// Auth-shaped annotation names from non-Spring-Security frameworks/custom stereotypes
+// that we recognize as "there's a security check here" without knowing its exact
+// semantics (role required? which one? just login?). Emitted as ir:unknown_middleware
+// — an honest "don't know" — rather than silently treated as no-auth.
+const UNKNOWN_SECURITY_ANN_NAMES = new Set([
+  "PreAuth",                 // SpringBlade (org.springblade.core.secure.annotation.PreAuth)
+  "RequiresRoles",           // Apache Shiro
+  "RequiresPermissions",     // Apache Shiro
+  "RequiresUser",            // Apache Shiro
+  "RequiresAuthentication",  // Apache Shiro
+  "RequireLogin",            // common custom naming
+  "CheckPermission",         // common custom naming
+])
+
 function extractAuthAnnotations(modifiers: Parser.SyntaxNode): AuthAnnotation[] {
   const out: AuthAnnotation[] = []
   for (const child of modifiers.children) {
@@ -356,6 +387,11 @@ function extractAuthAnnotations(modifiers: Parser.SyntaxNode): AuthAnnotation[] 
     if (name === "RolesAllowed") {
       const expr = getAnnotationStringArg(child) ?? ""
       out.push({ kind: "rolesAllowed", expression: expr, isAuthOnly: false })
+    }
+
+    if (UNKNOWN_SECURITY_ANN_NAMES.has(name)) {
+      const expr = getAnnotationStringArg(child) ?? ""
+      out.push({ kind: "unknown", expression: `@${name}${expr ? `(${expr})` : ""}`, isAuthOnly: false })
     }
   }
   return out

@@ -2,32 +2,54 @@ import { existsSync, readdirSync, readFileSync, statSync } from "fs"
 import { join } from "path"
 import { entrypointDetectors, httpEntrypointDetector } from "./entrypoint-detector.js"
 
+// Directories that never contain a Maven module worth descending into —
+// skipped for both correctness (test/generated sources) and scan speed.
+const SKIP_DIRS = new Set(["node_modules", "target", "build", ".git", ".idea", ".mvn", "dist", "out", "src"])
+
+// Bounds recursion depth for pathological directory trees; real Maven
+// multi-module projects (even deeply nested ones like SpringBlade's
+// blade-service/blade-demo/src/main/java) stay well under this.
+const MAX_SCAN_DEPTH = 8
+
 /**
- * Walk src/main/java under the root (handles multi-module Maven projects where
- * multiple sub-directories each have their own src/main/java tree).
+ * Walk src/main/java under the root, at any nesting depth. Handles
+ * multi-module Maven projects where modules are nested arbitrarily deep
+ * (e.g. `blade-service/blade-demo/src/main/java`), not just one level
+ * below the root.
  */
 export function findJavaFiles(root: string): string[] {
-  // Try the root itself first (single-module or test fixtures)
-  const singleSrc = join(root, "src", "main", "java")
-  if (existsSync(singleSrc)) return walkJava(singleSrc)
-
-  // Multi-module: each top-level sub-dir may have its own src/main/java
   const out: string[] = []
-  try {
-    for (const entry of readdirSync(root)) {
-      const sub = join(root, entry)
-      if (!statSync(sub).isDirectory()) continue
-      const javaSrc = join(sub, "src", "main", "java")
-      if (existsSync(javaSrc)) {
-        out.push(...walkJava(javaSrc))
-      }
-    }
-  } catch { /* permission error */ }
-
+  walkForJavaSrc(root, out, 0)
   if (out.length) return out
 
   // Flat fallback for test fixtures / unusual layouts
   return walkJava(root)
+}
+
+function walkForJavaSrc(dir: string, out: string[], depth: number): void {
+  if (depth > MAX_SCAN_DEPTH) return
+
+  const javaSrc = join(dir, "src", "main", "java")
+  if (existsSync(javaSrc)) out.push(...walkJava(javaSrc))
+
+  let entries: string[]
+  try {
+    entries = readdirSync(dir)
+  } catch {
+    return
+  }
+
+  for (const entry of entries) {
+    if (SKIP_DIRS.has(entry)) continue
+    const sub = join(dir, entry)
+    let isDir: boolean
+    try {
+      isDir = statSync(sub).isDirectory()
+    } catch {
+      continue
+    }
+    if (isDir) walkForJavaSrc(sub, out, depth + 1)
+  }
 }
 
 function walkJava(dir: string): string[] {

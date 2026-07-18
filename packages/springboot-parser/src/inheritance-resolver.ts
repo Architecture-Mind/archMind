@@ -1,9 +1,14 @@
 import { readFileSync } from "fs"
+import { moduleRootOf } from "./security-config-parser.js"
 
 /**
- * Scan all Java files and build a map of simple class name → @RequestMapping path.
- * Used to resolve base-class paths for controllers that use inheritance
+ * Scan all Java files and build a map of "module::simple class name" → @RequestMapping
+ * path. Used to resolve base-class paths for controllers that use inheritance
  * (e.g. `class FooController extends BasePublicController`).
+ *
+ * Keyed per-module (not just by simple name) so two unrelated modules that reuse
+ * the same base-class name (e.g. two different "BaseController"s in a multi-module
+ * repo) don't silently overwrite each other's URL prefix in the index.
  */
 export function buildBaseClassIndex(javaFiles: string[]): Map<string, string> {
   const index = new Map<string, string>()
@@ -25,7 +30,7 @@ export function buildBaseClassIndex(javaFiles: string[]): Map<string, string> {
     const mapping   = extractClassLevelRequestMapping(src)
 
     if (className && mapping !== null) {
-      index.set(className, mapping)
+      index.set(`${moduleRootOf(file)}::${className}`, mapping)
     }
   }
 
