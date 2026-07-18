@@ -1,7 +1,7 @@
-import { Project } from "ts-morph"
+import { Project, Node } from "ts-morph"
 import type { Decorator } from "ts-morph"
 import path from "path"
-import { readdirSync, readFileSync, statSync } from "fs"
+import { existsSync, readdirSync, readFileSync, statSync } from "fs"
 import type { NestJSSemanticRoute } from "../types.js"
 import type { GuardDescriptor } from "../types.js"
 import { extractGuards } from "./guard.extractor.js"
@@ -29,7 +29,21 @@ export interface RouteExtractorOptions {
   project?: Project
 }
 
-export function createNestProject(): Project {
+/**
+ * `tsConfigFilePath` (when given) is read only for its `compilerOptions` — `paths`/`baseUrl`
+ * for resolving TS path-alias imports (e.g. `@config/app.routes`) — never for its `include`,
+ * since skipAddingFilesFromTsConfig still applies. Without this, path-alias imports of
+ * shared route-constants objects (routesV1.version, etc.) can't be resolved cross-file.
+ */
+export function createNestProject(tsConfigFilePath?: string): Project {
+  if (tsConfigFilePath && existsSync(tsConfigFilePath)) {
+    return new Project({
+      tsConfigFilePath,
+      skipAddingFilesFromTsConfig: true,
+      skipFileDependencyResolution: true,
+      compilerOptions: { allowJs: true, noEmit: true, skipLibCheck: true, strict: false },
+    })
+  }
   return new Project({
     skipAddingFilesFromTsConfig: true,
     skipFileDependencyResolution: true,
@@ -45,7 +59,7 @@ export function extractRoutes(options: RouteExtractorOptions): NestJSSemanticRou
   if (options.project) {
     project = options.project
   } else {
-    project = createNestProject()
+    project = createNestProject(options.tsConfigPath ?? path.join(projectRoot, "tsconfig.json"))
     project.addSourceFilesAtPaths(
       path.join(projectRoot, "**/*.controller.ts").replace(/\\/g, "/")
     )
@@ -206,6 +220,103 @@ function walkForNeedle(dir: string, needle: string, excludeSuffixes: string[], o
   }
 }
 
+/**
+ * Resolve a route/prefix argument that isn't a literal — e.g. `@Controller(routesV1.version)`
+ * or `@Post(routesV1.user.root)` referencing a shared route-constants object — by walking
+ * identifier → variable declaration → object literal → property chains back to a literal.
+ * Found via real-repo blind test (domain-driven-hexagon): without this, the raw expression
+ * text ("routesV1.version") was emitted as the path segment instead of its resolved value.
+ */
+/**
+ * Route-constants objects (e.g. domain-driven-hexagon's `routesV1`) commonly live in a
+ * shared config file, not the controller file itself. The Project only ever loads
+ * *.controller.ts files (skipFileDependencyResolution: true — see createNestProject), so
+ * ts-morph's own symbol resolution can't see across that import. Resolve the relative
+ * import path by hand and lazily add the target file to the project on demand.
+ */
+function resolveCrossFileDeclaration(identifier: Node): Node | undefined {
+  if (!Node.isIdentifier(identifier)) return undefined
+  const name = identifier.getText()
+  const sourceFile = identifier.getSourceFile()
+
+  for (const imp of sourceFile.getImportDeclarations()) {
+    const named = imp.getNamedImports().find((ni) => (ni.getAliasNode()?.getText() ?? ni.getName()) === name)
+    if (!named) continue
+
+    const exportedName = named.getName()
+
+    // ts-morph resolves both relative and (with paths/baseUrl configured — see
+    // createNestProject) TS path-alias specifiers, lazily loading the target file
+    // into the project if it exists on disk and isn't already added.
+    const targetFile = imp.getModuleSpecifierSourceFile()
+    if (targetFile) {
+      const varDecl = targetFile.getVariableDeclaration(exportedName)
+      if (varDecl) return varDecl
+    }
+
+    // Fallback for relative specifiers when module resolution didn't kick in.
+    const specifier = imp.getModuleSpecifierValue()
+    if (!specifier.startsWith(".")) return undefined
+    const baseDir = sourceFile.getDirectoryPath()
+    const project  = sourceFile.getProject()
+    for (const suffix of [".ts", ".tsx", "/index.ts"]) {
+      const candidate = path.resolve(baseDir, specifier + suffix)
+      if (!existsSync(candidate)) continue
+      const file = project.getSourceFile(candidate) ?? project.addSourceFileAtPath(candidate)
+      const varDecl = file.getVariableDeclaration(exportedName)
+      if (varDecl) return varDecl
+    }
+    return undefined
+  }
+  return undefined
+}
+
+function resolveValueNode(node: Node): Node | null {
+  if (Node.isIdentifier(node)) {
+    // A local variable's own declaration resolves directly; an imported identifier's
+    // symbol resolves to its ImportSpecifier (not a VariableDeclaration) — cross-file
+    // resolution is needed in that case, not just when there's no declaration at all.
+    let decl = node.getSymbol()?.getDeclarations()[0]
+    if (!decl || !Node.isVariableDeclaration(decl)) {
+      decl = resolveCrossFileDeclaration(node) ?? decl
+    }
+    if (decl && Node.isVariableDeclaration(decl)) {
+      const init = decl.getInitializer()
+      return init ? resolveValueNode(init) : null
+    }
+    return null
+  }
+  if (Node.isPropertyAccessExpression(node)) {
+    const objNode = resolveValueNode(node.getExpression())
+    if (objNode && Node.isObjectLiteralExpression(objNode)) {
+      const prop = objNode.getProperty(node.getName())
+      if (prop && Node.isPropertyAssignment(prop)) {
+        const init = prop.getInitializer()
+        return init ? resolveValueNode(init) : null
+      }
+    }
+    return null
+  }
+  return node
+}
+
+function resolveStringConstant(node: Node): string | null {
+  const resolved = resolveValueNode(node)
+  if (!resolved) return null
+  if (Node.isStringLiteral(resolved) || Node.isNoSubstitutionTemplateLiteral(resolved)) {
+    return resolved.getLiteralText()
+  }
+  if (Node.isTemplateExpression(resolved)) {
+    let out = resolved.getHead().getLiteralText()
+    for (const span of resolved.getTemplateSpans()) {
+      out += resolveStringConstant(span.getExpression()) ?? span.getExpression().getText()
+      out += span.getLiteral().getLiteralText()
+    }
+    return out
+  }
+  return null
+}
+
 function resolveCronExpression(dec: Decorator): string {
   const args = dec.getCallExpression()?.getArguments() ?? []
   if (!args.length) return "unknown"
@@ -229,7 +340,8 @@ function resolveControllerDecArgs(dec: Decorator): { prefix: string; version: st
   }
 
   // String form: @Controller('users')
-  const raw = text.replace(/['"` ]/g, "")
+  const literal = /^['"`]/.test(text)
+  const raw = literal ? text.replace(/['"` ]/g, "") : (resolveStringConstant(args[0]) ?? text)
   return { prefix: raw.startsWith("/") ? raw : `/${raw}`, version: null }
 }
 
@@ -244,7 +356,9 @@ function resolveMethodVersion(decorators: Decorator[]): string | null {
 function resolveMethodPath(dec: Decorator): string {
   const args = dec.getCallExpression()?.getArguments() ?? []
   if (!args.length) return ""
-  return args[0].getText().replace(/['"]/g, "")
+  const text = args[0].getText().trim()
+  if (/^['"`]/.test(text)) return text.replace(/['"]/g, "")
+  return resolveStringConstant(args[0]) ?? text.replace(/['"]/g, "")
 }
 
 function joinPaths(prefix: string, suffix: string): string {

@@ -170,7 +170,7 @@ export function getGraphs(projectRoot: string): IntermediateExecutionGraph[] {
 
     if (!project) {
       // Cold parse: create Project, load all controller files, parse.
-      project = createNestProject()
+      project = createNestProject(join(projectRoot, "tsconfig.json"))
       project.addSourceFilesAtPaths(
         join(projectRoot, "**/*.controller.ts").replace(/\\/g, "/")
       )
