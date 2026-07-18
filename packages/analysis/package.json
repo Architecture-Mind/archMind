@@ -1,6 +1,6 @@
 {
   "name": "@kidkender/archmind-analysis",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Canonical analysis pipeline for ArchMind — parse project → RouteInfo[] with findings",
   "type": "module",
   "main": "./dist/analysis.cjs",

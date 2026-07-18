@@ -10,7 +10,7 @@ await build({
   platform: "node",
   format: "cjs",
   outfile: join(__dirname, "dist/lsp.cjs"),
-  external: ["tree-sitter", "tree-sitter-php", "ts-morph"],
+  external: ["tree-sitter", "tree-sitter-php", "tree-sitter-java", "ts-morph"],
   banner: { js: "#!/usr/bin/env node" },
   minify: false,
 })

@@ -1,6 +1,6 @@
 {
   "name": "@kidkender/archmind",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Execution topology intelligence for Laravel and NestJS — trace routes, detect regressions, find security gaps. No LLM required.",
   "type": "module",
   "bin": {

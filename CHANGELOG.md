@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-07-18
+
+Catch-up release: publishes real fixes that had already landed on `main` (source-only, never version-bumped) before this release process caught the gap.
+
+### Fixed
+- `@kidkender/archmind-analysis` 0.1.1: wired Spring Boot detection (`isSpringBootProject`/`parseSpringBootProject`) into `analyzeProject()` — previously any Spring Boot project silently fell through to the Laravel analyzer and returned zero routes. Confirmed on eladmin/litemall/mall: 0 routes before, 133/223/247 after, with auth gates, service calls, and findings all populated.
+- `@kidkender/archmind-laravel-parser` 0.5.1: resolves the implicit `/api` path prefix from `withRouting()`/`mapApiRoutes()` (Laravel 11/12 style bootstrapping); scopes permission-constant nodes to files actually reachable from the route graph instead of every file in the project.
+- `@kidkender/archmind-nestjs-parser` 0.7.1: route-constants object references in decorator args (e.g. `@Controller(routesV1.version)`) now resolve to their literal value instead of being emitted as raw expression text — includes a recursive identifier → declaration → object-literal resolver that follows `tsconfig.json` path aliases across files. Confirmed on `domain-driven-hexagon`: routes went from `"/routesV1.version/routesV1.user.root"` to the correct `"/v1/users"`.
+- `@kidkender/archmind-mcp-server` (`@kidkender/archmind-mcp`) 0.5.1: cache layer wiring updated for the RouteServiceProvider middleware/namespace and route-constants fixes above.
+- `@kidkender/archmind-lsp` 0.1.3: fixed a build break introduced by `archmind-analysis`'s new `tree-sitter-java` dependency — esbuild had no loader configured for the native `.node` prebuild binaries pulled in transitively via the bundled `archmind-analysis` → `archmind-springboot-parser` chain. `tree-sitter-java` is now external (matching the same fix already applied to `archmind-analysis`'s own build) and declared as a runtime dependency.
+- `@kidkender/archmind` CLI 0.7.2: rebuilt and republished — no source change, ships the `archmind-laravel-parser`/`archmind-nestjs-parser` fixes above, already present in its bundle since they predate this release's build.
+
 ## [0.7.1] - 2026-07-18
 
 ### Added

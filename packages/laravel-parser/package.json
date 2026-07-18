@@ -1,6 +1,6 @@
 {
   "name": "@kidkender/archmind-laravel-parser",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Static analysis parser for Laravel projects — extracts routes, middleware chains, FormRequest validation rules, and auth patterns into ArchMind IR graphs.",
   "type": "module",
   "main": "dist/index.js",
