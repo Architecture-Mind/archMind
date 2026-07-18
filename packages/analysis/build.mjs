@@ -11,10 +11,11 @@ await build({
   format:   "cjs",
   outfile:  join(__dirname, "dist/analysis.cjs"),
   external: [
-    "tree-sitter", "tree-sitter-php", "ts-morph",
+    "tree-sitter", "tree-sitter-php", "tree-sitter-java", "ts-morph",
     "@kidkender/archmind-protocol",
     "@kidkender/archmind-laravel-parser",
     "@kidkender/archmind-nestjs-parser",
+    "@kidkender/archmind-springboot-parser",
   ],
   minify:   false,
 })

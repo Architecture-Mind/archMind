@@ -23,11 +23,17 @@ export async function analyzeProject(projectRoot: string): Promise<RouteInfo[]> 
   const laravelParser = require("@kidkender/archmind-laravel-parser")
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const nestjsParser  = require("@kidkender/archmind-nestjs-parser")
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const springbootParser = require("@kidkender/archmind-springboot-parser")
 
   const isNestJS = existsSync(join(projectRoot, "nest-cli.json"))
+  const isSpringBoot = !isNestJS && springbootParser.isSpringBootProject(projectRoot)
 
   if (isNestJS) {
     return analyzeNestJS(projectRoot, nestjsParser, userConfig)
+  }
+  if (isSpringBoot) {
+    return analyzeSpringBoot(projectRoot, springbootParser, userConfig)
   }
   return analyzeLaravel(projectRoot, laravelParser, userConfig)
 }
@@ -80,6 +86,22 @@ function analyzeNestJS(projectRoot: string, parser: any, userConfig?: ArchMindUs
 
   // Re-run findings after isPublic is set so public routes don't trigger findings.
   return routes.map(r => ({ ...r, findings: detectFindings(r, userConfig) }))
+}
+
+function analyzeSpringBoot(projectRoot: string, parser: any, userConfig?: ArchMindUserConfig): RouteInfo[] {
+  const { parseSpringBootProject } = parser
+  const graphs = parseSpringBootProject(projectRoot) as any[]
+  const routes: RouteInfo[] = []
+
+  for (const graph of graphs) {
+    const handler = graph.nodes.find((n: any) => n.type === "ir:business_handler")
+    if (!handler) continue
+    try {
+      routes.push(buildRoute(graph, handler, "springboot", projectRoot, userConfig))
+    } catch { /* skip */ }
+  }
+
+  return routes
 }
 
 function inferPublicRoutes(routes: RouteInfo[]): void {
