@@ -204,12 +204,17 @@ export function getGraphs(projectRoot: string): IntermediateExecutionGraph[] {
   const config = loadProjectConfig(projectRoot)
   const resolved = resolveAliasMap(projectRoot, config)
   const routeFiles = resolved.routeFiles
-  const { aliasMap } = resolved
+  const { aliasMap, routeWrapping, routeNamespaceWrapping } = resolved
 
   const graphs: IntermediateExecutionGraph[] = []
   for (const relRouteFile of routeFiles) {
     const routesFile = join(projectRoot, relRouteFile)
-    const skeletons = parseRouteFile(routesFile, { aliasMap })
+    const skeletons = parseRouteFile(routesFile, {
+      aliasMap,
+      namespaces: config.namespaces,
+      wrappingMiddleware: routeWrapping.get(relRouteFile),
+      wrappingNamespace: routeNamespaceWrapping.get(relRouteFile),
+    })
     for (const g of skeletons) {
       graphs.push(augmentGraph(g, { projectRoot, config, cache: parseCache }))
     }
