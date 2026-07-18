@@ -15,6 +15,12 @@ export interface BootstrapParseResult {
   aliasMap: AliasMap
   /** Route files (relative to projectRoot) detected from ->withRouting(api:..., web:...) */
   routeFiles: string[]
+  /**
+   * Route file (relative to projectRoot) → path prefix implied by ->withRouting(). The
+   * `api:` argument implicitly wraps its file in Laravel's default 'api' prefix unless
+   * overridden by an explicit `apiPrefix:` argument (empty string disables it).
+   */
+  routePrefixes: Map<string, string>
 }
 
 type AstNode = { type: string; children: AstNode[]; namedChildren: AstNode[]; text: string }
@@ -30,14 +36,15 @@ export function parseBootstrap(filePath: string, projectRoot: string): Bootstrap
     source = readFileSync(filePath, "utf-8")
     tree = _parser.parse(source)
   } catch {
-    return { aliasMap: {}, routeFiles: [] }
+    return { aliasMap: {}, routeFiles: [], routePrefixes: new Map() }
   }
   const root = tree.rootNode as AstNode
 
   const aliasMap = extractAliasMap(root)
   const routeFiles = extractRouteFiles(root, filePath, projectRoot)
+  const routePrefixes = extractRoutePrefixes(root, filePath, projectRoot)
 
-  return { aliasMap, routeFiles }
+  return { aliasMap, routeFiles, routePrefixes }
 }
 
 // ---- Middleware alias extraction -----------------------------------------
@@ -118,6 +125,7 @@ function extractRouteFiles(root: AstNode, bootstrapFilePath: string, projectRoot
 }
 
 const ROUTE_ARG_NAMES = new Set(["api", "web", "commands"])
+const DEFAULT_API_PREFIX = "api"
 
 function findWithRoutingCall(node: AstNode, bootstrapDir: string, projectRoot: string, out: string[]): void {
   if (node.type === "member_call_expression") {
@@ -155,6 +163,57 @@ function extractNamedRouteArgs(argsNode: AstNode, bootstrapDir: string, projectR
     if (!rel.startsWith("..") && !out.includes(rel)) {
       out.push(rel)
     }
+  }
+}
+
+// Finds: ->withRouting(api: __DIR__.'/../routes/api.php', apiPrefix: 'api/v1')
+// The `api:` arg implicitly wraps in the default 'api' prefix unless `apiPrefix:` overrides it.
+function extractRoutePrefixes(root: AstNode, bootstrapFilePath: string, projectRoot: string): Map<string, string> {
+  const bootstrapDir = bootstrapFilePath.replace(/[/\\][^/\\]+$/, "")
+  const out = new Map<string, string>()
+  findWithRoutingPrefixCall(root, bootstrapDir, projectRoot, out)
+  return out
+}
+
+function findWithRoutingPrefixCall(node: AstNode, bootstrapDir: string, projectRoot: string, out: Map<string, string>): void {
+  if (node.type === "member_call_expression") {
+    const nameNode = node.children.find((c) => c.type === "name")
+    if (nameNode?.text === "withRouting") {
+      const args = node.children.find((c) => c.type === "arguments")
+      if (args) {
+        extractApiPrefixArg(args, bootstrapDir, projectRoot, out)
+        return
+      }
+    }
+  }
+  for (const child of node.children) {
+    findWithRoutingPrefixCall(child, bootstrapDir, projectRoot, out)
+  }
+}
+
+function extractApiPrefixArg(argsNode: AstNode, bootstrapDir: string, projectRoot: string, out: Map<string, string>): void {
+  let apiRelFile: string | null = null
+  let apiPrefix: string = DEFAULT_API_PREFIX
+
+  for (const child of argsNode.children) {
+    if (child.type !== "argument") continue
+    const nameNode = child.children.find((c) => c.type === "name")
+    if (!nameNode) continue
+
+    const colonIdx = child.children.findIndex((c) => c.text === ":")
+    const valueNode = colonIdx >= 0 ? child.children[colonIdx + 1] : undefined
+    if (!valueNode) continue
+
+    if (nameNode.text === "api") {
+      const resolved = resolvePathExpression(valueNode, bootstrapDir)
+      if (resolved) apiRelFile = relative(projectRoot, resolved).replace(/\\/g, "/")
+    } else if (nameNode.text === "apiPrefix") {
+      apiPrefix = extractStringContent(valueNode) ?? apiPrefix
+    }
+  }
+
+  if (apiRelFile && !apiRelFile.startsWith("..") && apiPrefix) {
+    out.set(apiRelFile, apiPrefix)
   }
 }
 

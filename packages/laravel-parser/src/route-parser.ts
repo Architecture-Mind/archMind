@@ -35,6 +35,11 @@ export interface ParseOptions {
   // before the file's own Route::namespace() groups are walked, which still
   // override it for routes registered inside them.
   wrappingNamespace?: string
+  // Path prefix wrapping this entire file from an outer Route::group(['prefix' => ...])
+  // in RouteServiceProvider.php (classic Laravel <=10's mapApiRoutes()-style pattern) or
+  // from Laravel 11+'s bootstrap/app.php ->withRouting(api: ...) implicit '/api' prefix.
+  // Seeds ctx.prefix before the file's own groups are walked, which still extend it.
+  wrappingPrefix?: string
 }
 
 export function parseRouteFile(
@@ -42,7 +47,8 @@ export function parseRouteFile(
   opts: ParseOptions = {}
 ): IntermediateExecutionGraph[] {
   const out: IntermediateExecutionGraph[] = []
-  processFile(filePath, { middleware: [...(opts.wrappingMiddleware ?? [])], prefix: "", namespace: opts.wrappingNamespace ?? "" }, out, opts)
+  const prefix = opts.wrappingPrefix ? joinPath("", opts.wrappingPrefix) : ""
+  processFile(filePath, { middleware: [...(opts.wrappingMiddleware ?? [])], prefix, namespace: opts.wrappingNamespace ?? "" }, out, opts)
   return out
 }
 

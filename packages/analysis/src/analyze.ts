@@ -36,7 +36,7 @@ async function analyzeLaravel(projectRoot: string, parser: any, userConfig?: Arc
   const { loadProjectConfig, resolveAliasMap, parseRouteFile, augmentGraph } = parser
 
   const config = loadProjectConfig(projectRoot)
-  const { aliasMap, routeFiles, routeWrapping, routeNamespaceWrapping } = resolveAliasMap(projectRoot, config)
+  const { aliasMap, routeFiles, routeWrapping, routeNamespaceWrapping, routePrefixWrapping } = resolveAliasMap(projectRoot, config)
   const routes: RouteInfo[] = []
 
   for (const relFile of routeFiles) {
@@ -45,6 +45,7 @@ async function analyzeLaravel(projectRoot: string, parser: any, userConfig?: Arc
       namespaces: config.namespaces,
       wrappingMiddleware: routeWrapping.get(relFile),
       wrappingNamespace: routeNamespaceWrapping.get(relFile),
+      wrappingPrefix: routePrefixWrapping.get(relFile),
     })
     for (const skeleton of skeletons) {
       try {

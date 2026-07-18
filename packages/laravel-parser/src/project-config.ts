@@ -3,7 +3,11 @@ import { join, relative, dirname, basename } from "path"
 import type { ProjectConfig } from "@kidkender/archmind-protocol"
 import { parseKernel, parseMiddlewareGroups, type AliasMap } from "./kernel-parser.js"
 import { parseBootstrap } from "./bootstrap-parser.js"
-import { parseRouteServiceProvider, parseRouteServiceProviderNamespaces } from "./route-service-provider-parser.js"
+import {
+  parseRouteServiceProvider,
+  parseRouteServiceProviderNamespaces,
+  parseRouteServiceProviderPrefixes,
+} from "./route-service-provider-parser.js"
 
 export const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   routeFiles: ["routes/api.php"],
@@ -331,6 +335,13 @@ export interface ResolvedAliases {
    * whose provider declares no such wrapping.
    */
   routeNamespaceWrapping: Map<string, string>
+  /**
+   * Route file path (relative to projectRoot) → path prefix wrapping it — either from
+   * an outer Route::group(['prefix' => ...]) in RouteServiceProvider.php (Laravel <=10's
+   * mapApiRoutes() pattern), or from Laravel 11+'s implicit ->withRouting(api: ...) 'api'
+   * prefix. Empty when no such wrapping is detected.
+   */
+  routePrefixWrapping: Map<string, string>
 }
 
 /**
@@ -354,12 +365,13 @@ export function resolveAliasMap(projectRoot: string, config: ProjectConfig): Res
       routeFiles: flattenRouteIncludes(projectRoot, expanded),
       routeWrapping: resolveRouteServiceProviderWrapping(projectRoot, kernelPath),
       routeNamespaceWrapping: resolveRouteServiceProviderNamespaceWrapping(projectRoot),
+      routePrefixWrapping: resolveRouteServiceProviderPrefixWrapping(projectRoot),
     }
   }
 
   if (existsSync(bootstrapPath)) {
     // Laravel 11/12 — bootstrap/app.php
-    const { aliasMap, routeFiles: detected } = parseBootstrap(bootstrapPath, projectRoot)
+    const { aliasMap, routeFiles: detected, routePrefixes } = parseBootstrap(bootstrapPath, projectRoot)
     // Use bootstrap-detected files only when .archmind.json did NOT explicitly set routeFiles.
     // Filter out console/channels files — they register commands/events, not HTTP routes.
     const NON_HTTP = new Set(["routes/console.php", "routes/channels.php"])
@@ -374,6 +386,7 @@ export function resolveAliasMap(projectRoot: string, config: ProjectConfig): Res
       routeFiles: flattenRouteIncludes(projectRoot, expanded),
       routeWrapping: new Map(), // bootstrap/app.php has no RouteServiceProvider group-wrapping pattern
       routeNamespaceWrapping: new Map(),
+      routePrefixWrapping: routePrefixes,
     }
   }
 
@@ -384,6 +397,7 @@ export function resolveAliasMap(projectRoot: string, config: ProjectConfig): Res
     routeFiles: flattenRouteIncludes(projectRoot, expanded),
     routeWrapping: new Map(),
     routeNamespaceWrapping: new Map(),
+    routePrefixWrapping: new Map(),
   }
 }
 
@@ -460,6 +474,18 @@ function resolveRouteServiceProviderNamespaceWrapping(projectRoot: string): Map<
   const rspPath = findRouteServiceProviderPath(projectRoot)
   if (!rspPath) return new Map()
   return parseRouteServiceProviderNamespaces(rspPath, projectRoot)
+}
+
+/**
+ * Resolve RouteServiceProvider.php's (or an equivalent custom-named provider's)
+ * ->prefix(...) wrapping (if present) into a path prefix per route file — covers classic
+ * Laravel's RouteServiceProvider::mapApiRoutes() pattern of wrapping routes/api.php in
+ * Route::prefix('api')->group(...).
+ */
+function resolveRouteServiceProviderPrefixWrapping(projectRoot: string): Map<string, string> {
+  const rspPath = findRouteServiceProviderPath(projectRoot)
+  if (!rspPath) return new Map()
+  return parseRouteServiceProviderPrefixes(rspPath, projectRoot)
 }
 
 /** Returns true when .archmind.json exists AND explicitly declares routeFiles. */

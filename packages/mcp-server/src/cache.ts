@@ -204,7 +204,7 @@ export function getGraphs(projectRoot: string): IntermediateExecutionGraph[] {
   const config = loadProjectConfig(projectRoot)
   const resolved = resolveAliasMap(projectRoot, config)
   const routeFiles = resolved.routeFiles
-  const { aliasMap, routeWrapping, routeNamespaceWrapping } = resolved
+  const { aliasMap, routeWrapping, routeNamespaceWrapping, routePrefixWrapping } = resolved
 
   const graphs: IntermediateExecutionGraph[] = []
   for (const relRouteFile of routeFiles) {
@@ -214,6 +214,7 @@ export function getGraphs(projectRoot: string): IntermediateExecutionGraph[] {
       namespaces: config.namespaces,
       wrappingMiddleware: routeWrapping.get(relRouteFile),
       wrappingNamespace: routeNamespaceWrapping.get(relRouteFile),
+      wrappingPrefix: routePrefixWrapping.get(relRouteFile),
     })
     for (const g of skeletons) {
       graphs.push(augmentGraph(g, { projectRoot, config, cache: parseCache }))

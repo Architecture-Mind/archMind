@@ -15,6 +15,11 @@ export type RouteWrappingMap = Map<string, string[]>
 // wraps it, from ->namespace(...) (fluent or ['namespace' => ...] options-array form).
 export type RouteNamespaceMap = Map<string, string>
 
+// route file path (relative to projectRoot, POSIX-style) → the path prefix that wraps
+// it, from ->prefix(...) (fluent or ['prefix' => ...] options-array form) — e.g. classic
+// Laravel's RouteServiceProvider::mapApiRoutes() wrapping routes/api.php in prefix('api').
+export type RoutePrefixMap = Map<string, string>
+
 /**
  * Parse a Laravel <=10 app/Providers/RouteServiceProvider.php for
  * Route::group(['middleware' => X, ...], fn () => require base_path(Y)) — and the
@@ -40,25 +45,39 @@ export function parseRouteServiceProviderNamespaces(filePath: string, projectRoo
   return parseProvider(filePath, projectRoot).namespace
 }
 
+/**
+ * Parse the same provider for ->prefix(...) wrapping — covers classic Laravel's
+ * RouteServiceProvider::mapApiRoutes() pattern:
+ *   Route::prefix('api')->middleware('api')->group(base_path('routes/api.php'));
+ * Plain-path routes (e.g. akaunting's `Route::resource('invoices', ...)`) do not carry
+ * this prefix in their own file, so it must be resolved from the outer wrap.
+ *
+ * Returns an empty map if the file cannot be read or no such pattern is found.
+ */
+export function parseRouteServiceProviderPrefixes(filePath: string, projectRoot: string): RoutePrefixMap {
+  return parseProvider(filePath, projectRoot).prefix
+}
+
 // ---- Internals -------------------------------------------------------
 
 function parseProvider(
   filePath: string,
   projectRoot: string
-): { middleware: RouteWrappingMap; namespace: RouteNamespaceMap } {
+): { middleware: RouteWrappingMap; namespace: RouteNamespaceMap; prefix: RoutePrefixMap } {
   const middleware: RouteWrappingMap = new Map()
   const namespace: RouteNamespaceMap = new Map()
+  const prefix: RoutePrefixMap = new Map()
   let source: string
   let tree: ReturnType<typeof _parser.parse>
   try {
     source = readFileSync(filePath, "utf-8")
     tree = _parser.parse(source)
   } catch {
-    return { middleware, namespace }
+    return { middleware, namespace, prefix }
   }
   const classNamespaceProperty = findClassNamespaceProperty(tree.rootNode)
-  walk(tree.rootNode, filePath, projectRoot, middleware, namespace, classNamespaceProperty)
-  return { middleware, namespace }
+  walk(tree.rootNode, filePath, projectRoot, middleware, namespace, prefix, classNamespaceProperty)
+  return { middleware, namespace, prefix }
 }
 
 /** Find `protected/public/private $namespace = '...';` declared directly in the class body. */
@@ -85,16 +104,17 @@ function walk(
   projectRoot: string,
   middlewareOut: RouteWrappingMap,
   namespaceOut: RouteNamespaceMap,
+  prefixOut: RoutePrefixMap,
   classNamespaceProperty: string | null
 ): void {
   if (node.type === "member_call_expression" || node.type === "scoped_call_expression") {
     const nameNode = node.childForFieldName("name")
     if (nameNode?.text === "group") {
-      handleGroupCall(node, providerFile, projectRoot, middlewareOut, namespaceOut, classNamespaceProperty)
+      handleGroupCall(node, providerFile, projectRoot, middlewareOut, namespaceOut, prefixOut, classNamespaceProperty)
     }
   }
   for (const child of node.children) {
-    walk(child, providerFile, projectRoot, middlewareOut, namespaceOut, classNamespaceProperty)
+    walk(child, providerFile, projectRoot, middlewareOut, namespaceOut, prefixOut, classNamespaceProperty)
   }
 }
 
@@ -104,6 +124,7 @@ function handleGroupCall(
   projectRoot: string,
   middlewareOut: RouteWrappingMap,
   namespaceOut: RouteNamespaceMap,
+  prefixOut: RoutePrefixMap,
   classNamespaceProperty: string | null
 ): void {
   const argsNode = node.childForFieldName("arguments")
@@ -112,24 +133,27 @@ function handleGroupCall(
 
   const middleware: string[] = []
   let namespaceValue: string | null = null
+  let prefixValue: string | null = null
 
   // Fluent form: Route::middleware('api')->namespace(...)->prefix('v1')->group(fn)
   const objectNode = node.childForFieldName("object")
   if (objectNode) {
     collectFluentMiddleware(objectNode, middleware)
     namespaceValue = collectFluentNamespace(objectNode, classNamespaceProperty)
+    prefixValue = collectFluentPrefix(objectNode)
   }
 
   let closureNode: Parser.SyntaxNode | undefined = args[0]
 
-  // Options form: Route::group(['middleware' => X, 'namespace' => Y, ...], fn)
+  // Options form: Route::group(['middleware' => X, 'namespace' => Y, 'prefix' => Z, ...], fn)
   if (args[0]?.type === "array_creation_expression") {
     extractMiddlewareFromOptions(args[0], middleware)
     namespaceValue = extractNamespaceFromOptions(args[0]) ?? namespaceValue
+    prefixValue = extractKeyFromOptions(args[0], "prefix") ?? prefixValue
     closureNode = args[1]
   }
 
-  if (!closureNode || (middleware.length === 0 && !namespaceValue)) return
+  if (!closureNode || (middleware.length === 0 && !namespaceValue && !prefixValue)) return
 
   // Laravel's Router::group() also accepts a route-file path directly instead of a
   // closure — the common Laravel <=8 skeleton form:
@@ -141,6 +165,7 @@ function handleGroupCall(
       middlewareOut.set(directPath, Array.from(new Set([...existing, ...middleware])))
     }
     if (namespaceValue) namespaceOut.set(directPath, namespaceValue)
+    if (prefixValue) prefixOut.set(directPath, prefixValue)
     return
   }
 
@@ -153,6 +178,7 @@ function handleGroupCall(
       middlewareOut.set(relFile, Array.from(new Set([...existing, ...middleware])))
     }
     if (namespaceValue) namespaceOut.set(relFile, namespaceValue)
+    if (prefixValue) prefixOut.set(relFile, prefixValue)
   })
 }
 
@@ -185,16 +211,39 @@ function collectFluentNamespace(node: Parser.SyntaxNode, classNamespaceProperty:
 }
 
 function extractNamespaceFromOptions(optionsNode: Parser.SyntaxNode): string | null {
+  return extractKeyFromOptions(optionsNode, "namespace")
+}
+
+function extractKeyFromOptions(optionsNode: Parser.SyntaxNode, key: string): string | null {
   for (const child of optionsNode.children) {
     if (child.type !== "array_element_initializer") continue
     const named = child.namedChildren
     if (named.length < 2) continue
-    const key = named[0]?.type === "string"
+    const foundKey = named[0]?.type === "string"
       ? (named[0].children.find((c) => c.type === "string_content")?.text ?? "")
       : named[0]?.text ?? ""
-    if (key !== "namespace") continue
+    if (foundKey !== key) continue
     const value = named[1]
     if (value) return resolveValue(value)[0] ?? null
+  }
+  return null
+}
+
+/** Walk a fluent method chain for a `->prefix(...)` call. */
+function collectFluentPrefix(node: Parser.SyntaxNode): string | null {
+  let cur: Parser.SyntaxNode | null = node
+  while (cur) {
+    if (cur.type === "member_call_expression" || cur.type === "scoped_call_expression") {
+      const nameNode = cur.childForFieldName("name")
+      if (nameNode?.text === "prefix") {
+        const argsNode = cur.childForFieldName("arguments")
+        const arg = argsNode ? getArgNodes(argsNode)[0] : undefined
+        if (arg) return resolveValue(arg)[0] ?? null
+      }
+      cur = cur.type === "scoped_call_expression" ? null : (cur.childForFieldName("object") ?? null)
+    } else {
+      cur = null
+    }
   }
   return null
 }
