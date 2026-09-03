@@ -19,5 +19,12 @@
     "ts-jest": "^29.0.0",
     "typescript": "^5.4.0"
   },
-  "private": true
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "description": "Correlates ingested runtime spans with static execution graphs — N+1 query detection and runtime-vs-static drift."
 }

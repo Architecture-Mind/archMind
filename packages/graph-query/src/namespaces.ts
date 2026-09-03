@@ -109,9 +109,18 @@ export class MessagingQuery {
 export class DataQuery {
   constructor(private readonly allNodes: NodeQuery) {}
 
-  /** True if any tenant_context node exists. */
+  /**
+   * True if any tenant_context node exists, or a runtime_injection node whose
+   * symbol names a tenant binding (e.g. `app()->instance('tenant', $tenant)`) —
+   * no parser has ever emitted a dedicated `ir:tenant_context` node; tenant
+   * presence is signaled via runtime_injection instead (see graph-augmenter.ts's
+   * addIsolationNodes), so that's the real-world shape this must match.
+   */
   hasTenantContext(): boolean {
-    return this.allNodes.ofType(IR_NODE_TYPES.TENANT_CONTEXT).exists()
+    return (
+      this.allNodes.ofType(IR_NODE_TYPES.TENANT_CONTEXT).exists() ||
+      this.allNodes.ofType(IR_NODE_TYPES.RUNTIME_INJECT).withSymbol("tenant").exists()
+    )
   }
 
   /** True if any unscoped_query or unscoped_write node exists. */

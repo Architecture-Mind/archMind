@@ -1,6 +1,6 @@
 # ArchMind
 
-**Semantic execution graph engine for Laravel, NestJS, and Spring Boot — built for AI assistants and CI.**
+**Semantic execution graph engine for Laravel, NestJS, Spring Boot, and Go/Gin — built for AI assistants and CI.**
 
 ArchMind parses your app into a structured execution graph and gives AI assistants (Claude, Cursor, Copilot) the minimal relevant subgraph for a query — achieving comparable or better answer quality at a fraction of the tokens that naive file-dump RAG uses.
 
@@ -26,6 +26,8 @@ ArchMind's accuracy pass has also surfaced real, previously undocumented securit
 **Where it doesn't win:** deeper reasoning benchmarks (cross-file causality, multi-turn sessions) show archMind edging ahead but with concrete, documented gaps — transaction-scope flattening (the graph knows *a* transaction exists but not precisely which downstream calls are inside it) and an accessor-vs-terminal-mutation gap (a relationship accessor is captured as touched, without confirming the chained `.delete()` on it actually ran). These are IR-granularity ceilings, not retrieval-reach problems, and are being worked on incrementally rather than glossed over.
 
 The difference compounds on large codebases where a single route touches dozens of files.
+
+**Go/Gin support is newer and not yet held to the same bar.** The numbers above are Laravel/NestJS/Spring Boot only, from hand-verified ground truth compared against real LLM calls. Go/Gin has been validated structurally — full-project parsing against 3 real Gin+GORM codebases with zero crashes and spot-checked node accuracy — but not yet run through the same hand-verified accuracy benchmark. Treat it as functional but less battle-tested until that benchmark exists.
 
 ---
 
@@ -200,12 +202,21 @@ DELETE /api/vaults/{id}
 - `@Cron` (`@nestjs/schedule`) jobs as first-class cron entrypoints
 - Route-constants object references resolved in decorator arguments
 
+### Go/Gin
+
+- Route registration spanning multiple function-call layers (`main()` → a `RegisterRoutes()` aggregator → per-domain `RegisterXRoutes()` functions), with group prefix and middleware correctly inherited across each hop
+- Global auth middleware (`r.Use(AuthMiddleware())`) that exempts specific routes via a runtime `method+path` skip-list read from inside the middleware's own body — not just its registration site
+- `RequireRole`/`RequireSystemRole`-style authorization checks, with Go `const` role/permission arguments resolved to their declared value
+- `ShouldBindJSON`/`ShouldBindQuery`/`ShouldBindUri` resolved to the bound DTO struct's `binding:"..."` validation tags
+- GORM `db.Transaction(func(tx *gorm.DB) error {...})` closures, including one hop into a directly-called service method (handlers are typically thin; the transaction usually lives in the service layer)
+- Scoped to a Gin + GORM + `internal/{handler,service,middleware,model,dto}` project layout Tenant/isolation scoping isn't implemented yet.
+
 ---
 
 ## Requirements
 
 - Node.js ≥ 18
-- A Laravel (≥8, tested on 10/11/12), NestJS, or Spring Boot (Maven or Gradle) project
+- A Laravel (≥8, tested on 10/11/12), NestJS, Spring Boot (Maven or Gradle), or Go/Gin project
 
 ## License
 

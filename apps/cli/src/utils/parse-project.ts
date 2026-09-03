@@ -9,9 +9,10 @@ import {
   parseQueuedJobs,
 } from "@kidkender/archmind-laravel-parser"
 import { parseNestJSProject } from "@kidkender/archmind-nestjs-parser"
+import { parseGinProjectAt, isGinProject, findGoFiles } from "@kidkender/archmind-go-parser"
 import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
-export type Framework = "laravel" | "nestjs" | "springboot" | "unknown"
+export type Framework = "laravel" | "nestjs" | "springboot" | "go" | "unknown"
 
 function tryParseSpringBoot(root: string): { graphs: IntermediateExecutionGraph[]; fileCount: number } | null {
   try {
@@ -93,6 +94,11 @@ export function detectFramework(projectRoot: string): Framework {
     }
   }
 
+  // go.mod is a strong, cheap-to-check signal unique to Go — checked before
+  // the fallback heuristics below so a Gin project never falls through to
+  // the Laravel default.
+  if (existsSync(join(projectRoot, "go.mod")) && isGinProject(projectRoot)) return "go"
+
   // Fallback heuristics
   if (existsSync(join(projectRoot, "artisan"))) return "laravel"
   if (existsSync(join(projectRoot, "nest-cli.json"))) return "nestjs"
@@ -113,6 +119,11 @@ export function parseProject(projectRoot: string): ParsedProject {
     const result = tryParseSpringBoot(projectRoot)
     const graphs = result?.graphs ?? []
     return { graphs, routeCount: graphs.length, fileCount: result?.fileCount ?? 0, projectRoot, framework }
+  }
+
+  if (framework === "go") {
+    const graphs = parseGinProjectAt(projectRoot)
+    return { graphs, routeCount: graphs.length, fileCount: findGoFiles(projectRoot).length, projectRoot, framework }
   }
 
   // Default: Laravel

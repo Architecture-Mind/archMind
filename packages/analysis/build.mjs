@@ -16,6 +16,7 @@ await build({
     "@kidkender/archmind-laravel-parser",
     "@kidkender/archmind-nestjs-parser",
     "@kidkender/archmind-springboot-parser",
+    "@kidkender/archmind-go-parser",
   ],
   minify:   false,
 })

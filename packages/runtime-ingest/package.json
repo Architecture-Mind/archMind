@@ -18,5 +18,12 @@
     "ts-jest": "^29.0.0",
     "typescript": "^5.4.0"
   },
-  "private": true
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "description": "Ingests OpenTelemetry (OTLP JSON) runtime spans and normalizes them for correlation with ArchMind execution graphs."
 }

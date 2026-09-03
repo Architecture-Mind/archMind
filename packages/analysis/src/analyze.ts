@@ -25,15 +25,24 @@ export async function analyzeProject(projectRoot: string): Promise<RouteInfo[]> 
   const nestjsParser  = require("@kidkender/archmind-nestjs-parser")
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const springbootParser = require("@kidkender/archmind-springboot-parser")
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const goParser = require("@kidkender/archmind-go-parser")
 
   const isNestJS = existsSync(join(projectRoot, "nest-cli.json"))
   const isSpringBoot = !isNestJS && springbootParser.isSpringBootProject(projectRoot)
+  // go.mod is a strong, cheap-to-check signal unique to Go — checked before
+  // the PHP/JS/Java branches so a Gin project never falls through to the
+  // Laravel default below.
+  const isGin = !isNestJS && !isSpringBoot && existsSync(join(projectRoot, "go.mod")) && goParser.isGinProject(projectRoot)
 
   if (isNestJS) {
     return analyzeNestJS(projectRoot, nestjsParser, userConfig)
   }
   if (isSpringBoot) {
     return analyzeSpringBoot(projectRoot, springbootParser, userConfig)
+  }
+  if (isGin) {
+    return analyzeGin(projectRoot, goParser, userConfig)
   }
   return analyzeLaravel(projectRoot, laravelParser, userConfig)
 }
@@ -98,6 +107,22 @@ function analyzeSpringBoot(projectRoot: string, parser: any, userConfig?: ArchMi
     if (!handler) continue
     try {
       routes.push(buildRoute(graph, handler, "springboot", projectRoot, userConfig))
+    } catch { /* skip */ }
+  }
+
+  return routes
+}
+
+function analyzeGin(projectRoot: string, parser: any, userConfig?: ArchMindUserConfig): RouteInfo[] {
+  const { parseGinProjectAt } = parser
+  const graphs = parseGinProjectAt(projectRoot) as any[]
+  const routes: RouteInfo[] = []
+
+  for (const graph of graphs) {
+    const handler = graph.nodes.find((n: any) => n.type === "ir:business_handler")
+    if (!handler) continue
+    try {
+      routes.push(buildRoute(graph, handler, "go", projectRoot, userConfig))
     } catch { /* skip */ }
   }
 
