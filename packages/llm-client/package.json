@@ -20,5 +20,12 @@
     "ts-jest": "^29.0.0",
     "typescript": "^5.4.0"
   },
-  "private": true
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "description": "LLM client abstraction (Claude, OpenAI, and a mock client for tests) used by the orchestrator and scorer."
 }

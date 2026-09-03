@@ -19,5 +19,12 @@
     "ts-jest": "^29.0.0",
     "typescript": "^5.4.0"
   },
-  "private": true
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "description": "Serializes ArchMind execution graphs into LLM-ready prompts."
 }
