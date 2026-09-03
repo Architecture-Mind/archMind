@@ -1,4 +1,4 @@
-import { walk } from "./ast.js"
+import { walk, bareTypeName } from "./ast.js"
 import type { SyntaxNode } from "./ast.js"
 
 export interface BoundField {
@@ -31,6 +31,38 @@ export function findStructFields(root: SyntaxNode, typeName: string): BoundField
         const bindingMatch = tagText.match(/binding:"([^"]*)"/)
         return { name, bindingTag: bindingMatch ? bindingMatch[1] : null }
       })
+  }
+  return null
+}
+
+/**
+ * Finds `type <name> struct { ... }` and returns field name → bare declared
+ * type (e.g. "appointmentService" → "AppointmentService"), for resolving a
+ * handler's `h.someService.Method(...)` call to the service type that
+ * declares Method — one hop of receiver resolution beyond the handler
+ * itself, needed because all 3 surveyed repos put GORM transactions in the
+ * service layer, not directly in the handler (see docs/go-support-plan.md
+ * §6 and Phase C). Returns null when `typeName` isn't a struct in `root`.
+ */
+export function findStructFieldTypes(root: SyntaxNode, typeName: string): Map<string, string> | null {
+  for (const node of walk(root)) {
+    if (node.type !== "type_spec") continue
+    if (node.childForFieldName("name")?.text !== typeName) continue
+    const typeNode = node.childForFieldName("type")
+    if (!typeNode || typeNode.type !== "struct_type") continue
+
+    const fieldList = typeNode.namedChildren.find((c) => c.type === "field_declaration_list")
+    const map = new Map<string, string>()
+    if (!fieldList) return map
+
+    for (const f of fieldList.namedChildren) {
+      if (f.type !== "field_declaration") continue
+      const name = f.childForFieldName("name")?.text
+      const fieldType = f.childForFieldName("type")
+      const bare = fieldType ? bareTypeName(fieldType) : null
+      if (name && bare) map.set(name, bare)
+    }
+    return map
   }
   return null
 }

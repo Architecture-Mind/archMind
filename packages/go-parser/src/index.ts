@@ -4,3 +4,4 @@ export { classifyMiddlewareName, irTypeForMiddleware, extractSkipList, type Skip
 export { buildConstRegistry, resolveConstExpr } from "./const-resolver.js"
 export { findStructFields, resolveDtoBinding, type BoundField } from "./dto-binding-parser.js"
 export { buildMethodRegistry, findBindCalls, resolveVarDtoType, type BindCall, type HandlerMethod } from "./handler-parser.js"
+export { findTransactionBoundaries, type TransactionBoundary } from "./transaction-parser.js"

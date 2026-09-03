@@ -361,3 +361,100 @@ func (h *TaskHandler) CreateTask(ctx *gin.Context) {
     expect(g.nodes.some((n) => n.type === IR_NODE_TYPES.VALIDATION_GATE)).toBe(false)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Phase C: transaction boundary (GORM db.Transaction(func(tx *gorm.DB) error))
+// ---------------------------------------------------------------------------
+// Real pattern (smart-clinic-api's admission.go): the handler calls a
+// service method, and the transaction lives inside *that* service method,
+// not the handler — a one-hop resolution the parser must follow.
+
+const TASK_HANDLER_WITH_SERVICE_GO: GoSourceFile = {
+  path: "internal/handler/task.go",
+  content: `
+package handler
+
+type TaskHandler struct {
+	taskService *service.TaskService
+}
+
+func (h *TaskHandler) CreateTask(ctx *gin.Context) {
+	var req dto.CreateTaskRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		return
+	}
+	if err := h.taskService.Create(ctx.Request.Context(), req); err != nil {
+		return
+	}
+}
+`,
+}
+
+const TASK_SERVICE_WITH_TXN_GO: GoSourceFile = {
+  path: "internal/service/task.go",
+  content: `
+package service
+
+func (s *TaskService) Create(ctx context.Context, req dto.CreateTaskRequest) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		task := model.Task{Title: req.Title}
+		if err := tx.Create(&task).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+}
+`,
+}
+
+const TASK_SERVICE_NO_TXN_GO: GoSourceFile = {
+  path: "internal/service/task.go",
+  content: `
+package service
+
+func (s *TaskService) Create(ctx context.Context, req dto.CreateTaskRequest) error {
+	task := model.Task{Title: req.Title}
+	return s.db.WithContext(ctx).Create(&task).Error
+}
+`,
+}
+
+describe("parseGinProject — transaction boundary via one-hop service resolution", () => {
+  test("resolves h.someService.Method(...) to the service method and finds its Transaction() closure", () => {
+    const graphs = parseGinProject([
+      MAIN_WITH_HANDLER_GO, AUTH_MIDDLEWARE_GO, TASK_HANDLER_ROUTES_GO,
+      TASK_HANDLER_WITH_SERVICE_GO, TASK_SERVICE_WITH_TXN_GO, TASK_DTO_GO,
+    ])
+    const g = graphs.find((g) => g.entrypoint === "POST /api/v1/tasks/")!
+    const types = g.nodes.map((n) => n.type)
+    expect(types).toEqual([
+      IR_NODE_TYPES.AUTH_GATE,
+      IR_NODE_TYPES.VALIDATION_GATE,
+      IR_NODE_TYPES.BUSINESS_HANDLER,
+      IR_NODE_TYPES.TXN_BOUNDARY,
+    ])
+    const txn = g.nodes.find((n) => n.type === IR_NODE_TYPES.TXN_BOUNDARY)!
+    expect(txn.symbol).toBe("TaskService.Create")
+    expect(txn.file).toBe("internal/service/task.go")
+  })
+
+  test("business_handler precedes txn_boundary in the edge chain", () => {
+    const graphs = parseGinProject([
+      MAIN_WITH_HANDLER_GO, AUTH_MIDDLEWARE_GO, TASK_HANDLER_ROUTES_GO,
+      TASK_HANDLER_WITH_SERVICE_GO, TASK_SERVICE_WITH_TXN_GO, TASK_DTO_GO,
+    ])
+    const g = graphs.find((g) => g.entrypoint === "POST /api/v1/tasks/")!
+    const handler = g.nodes.find((n) => n.type === IR_NODE_TYPES.BUSINESS_HANDLER)!
+    const txn = g.nodes.find((n) => n.type === IR_NODE_TYPES.TXN_BOUNDARY)!
+    expect(g.edges).toContainEqual(expect.objectContaining({ from: handler.id, to: txn.id }))
+  })
+
+  test("no txn_boundary node when the service method never wraps a transaction", () => {
+    const graphs = parseGinProject([
+      MAIN_WITH_HANDLER_GO, AUTH_MIDDLEWARE_GO, TASK_HANDLER_ROUTES_GO,
+      TASK_HANDLER_WITH_SERVICE_GO, TASK_SERVICE_NO_TXN_GO, TASK_DTO_GO,
+    ])
+    const g = graphs.find((g) => g.entrypoint === "POST /api/v1/tasks/")!
+    expect(g.nodes.some((n) => n.type === IR_NODE_TYPES.TXN_BOUNDARY)).toBe(false)
+  })
+})
