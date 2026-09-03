@@ -1,7 +1,7 @@
 {
   "name": "@kidkender/archmind",
-  "version": "0.7.2",
-  "description": "Execution topology intelligence for Laravel and NestJS — trace routes, detect regressions, find security gaps. No LLM required.",
+  "version": "0.8.0",
+  "description": "Execution topology intelligence for Laravel, NestJS, and Go/Gin — trace routes, detect regressions, find security gaps. No LLM required.",
   "type": "module",
   "bin": {
     "archmind": "./dist/index.cjs"
