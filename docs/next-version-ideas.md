@@ -191,17 +191,35 @@ Benchmarked against akaunting (642 routes) as a fresh, previously-unseen repo �
 ## 9. Tree-sitter dependency version skew causing flaky parser tests
 
 **Priority:** High — undermines trust in the whole test suite and any CI built on top of it
-**Effort:** Medium (needs careful upgrade + full regression pass, not a blind bump)
-**Status:** Root-caused 2026-09-03, not yet fixed
+**Effort:** Medium
+**Status:** Root cause corrected + primary fix shipped 2026-09-03 (branch `fix/retrieval-flaky-tests-ci`); one deliverable still open
 
-`packages/laravel-parser` pins `tree-sitter@^0.21.0` but `tree-sitter-php@^0.23.12` — the grammar binding is built against a newer core ABI than the runtime provides. 14 files each hold a module-level `new Parser()` singleton (correct pattern in isolation), but when many of these singletons parse heavily in the *same process* (e.g. `npm test` running all 18 test suites in one Jest worker), `_parser.parse(source)` intermittently throws. Every parser module wraps that call in a bare `catch { return <empty defaults> }`, so the throw is swallowed and silently reported as "nothing found" instead of a hard failure — which is what made this invisible for so long (confirmed while fixing the AUTH-002 retrieval regression: `isolation-parser.test.ts` passes 3/3 in isolation but randomly fails when run with the other 17 suites; failure count scales with worker contention — 24-49 failures/283 tests with default parallelism, 201/283 under `-w 1` where every suite shares one process).
+Initial hypothesis (below, kept for record) was a `tree-sitter@^0.21.0` / `tree-sitter-php@^0.23.12` ABI skew. **That was wrong** — disproved empirically: a plain-Node script reusing the same `Parser` singleton for 500 heavy parses in a row had zero failures. The real cause: Jest reuses one worker *process* across multiple test files in the same package; each file re-imports that package's module-level `new Parser()` singleton, and repeatedly re-loading the native tree-sitter addon into the same process is what makes `_parser.parse(source)` intermittently throw — not the grammar/core version pairing itself. Confirmed by setting `maxWorkers` high enough (in `laravel-parser`'s and `springboot-parser`'s `jest.config.js`) that every test file always gets its own process: 5/5 and then 3/3 repeated full-suite runs came back completely clean, both isolated and via `npm test`.
 
-**Deliverables:**
-- Upgrade `tree-sitter`/`tree-sitter-php` to a matched, current pair (latest `tree-sitter` is 0.25.1) and re-run the full suite for stability across multiple repeated runs, not just once
-- Replace the blanket `catch { return emptyDefaults }` in each parser module with a narrower catch (file-not-found only) so a real parse failure surfaces loudly instead of reading as "no findings"
-- Re-enable CI test gating only after the suite is confirmed deterministic across N repeated runs
+Every parser module still wraps its `_parser.parse()` call in a bare `catch { return <empty defaults> }`, which is what made the (now-fixed) flakiness read as "nothing found" instead of a hard failure for so long, and is also why two unrelated real bugs stayed invisible for a full release cycle: the AUTH-002 `permission-constant` reachability regression (`graph-augmenter.ts`) and `hasTenantContext()` checking a node type (`ir:tenant_context`) that no parser has ever emitted (`namespaces.ts`, `trace-engine.ts`) — both fixed on the same branch.
 
-**Why:** This is very likely *why* there's no CI on this repo at all — a red/green result that changes every run isn't a gate anyone can trust. It's also why the AUTH-002 regression (`permission-constant` reachability, fixed in `graph-augmenter.ts`) went unnoticed for a full release cycle: nobody could tell a real regression from noise.
+**Remaining deliverable:**
+- Replace the blanket `catch { return emptyDefaults }` in each parser module with a narrower catch (file-not-found only) so a genuine future parse failure surfaces loudly instead of reading as "no findings" — not done yet; the `maxWorkers` fix removed the trigger but the swallow-everything pattern itself is still there
+
+**Why:** This is very likely *why* there's no CI on this repo at all — a red/green result that changes every run isn't a gate anyone can trust.
+
+---
+
+## 10. Framework #4: Go/Gin support
+
+**Priority:** High — driven by real, current need (Claude/Cursor assisting on 3 live Go repos), not speculative reach
+**Effort:** High (new tree-sitter grammar + new parser package on par with laravel-parser)
+**Status:** Plan drafted 2026-09-03, grounded in 3 real repos — see [`docs/go-support-plan.md`](./go-support-plan.md) for full detail; not yet started
+
+Surveyed `CRM - DG Group/crm-api`, `smart-clinic/smart-clinic-api`, and `prohealth/prohealth-api` — all three share the same stack (Gin + GORM + JWT + go-playground/validator) and near-identical `cmd/`/`routes/`/`internal/{handler,service,middleware,model,dto}` layout, very likely the same personal template reused across projects. That consistency means v1 can target this specific shape narrowly instead of "Go" in general — same lesson as item #3's "don't build the adapter kit before the second framework."
+
+Two findings materially change scope vs. a naive port of the Laravel parser:
+- Route registration spans 3-4 function-call layers (`main.go` → `routes.go` → `routes/*.go`), deeper than Laravel's `RouteServiceProvider` wrapping but the same *kind* of problem, already solved once.
+- The highest-risk gap: global auth middleware (`r.Use(middleware.AuthMiddleware())`) with a **runtime skip-list keyed by method+path** inside the middleware body itself — a naive registration-site check would mark every public route (login, register, health) as authenticated. This is the Go-shaped version of the BookStack false-positive class of bug already hit once in the Laravel parser.
+
+Priority is **MCP/AI-assist value first** (`archmind_get_execution_graph` / `archmind_get_findings` giving accurate route/auth answers for these 3 repos) — CI topology-guard parity is explicitly a later goal, not v1. Phased as: **A** — routes + auth gate (ships first, unblocks most of the MCP value alone), **B** — role/authz-check + validation-gate, **C** — transaction boundary (GORM `.Transaction()` closure — directly transferable technique from Laravel) + isolation (open question, needs more reading).
+
+**Why:** Concrete, current pull (3 real repos in daily use) rather than a hypothetical reach case — different in kind from item #3's speculative "which framework 4" question, which this supersedes for the actual next framework.
 
 ---
 
@@ -209,12 +227,13 @@ Benchmarked against akaunting (642 routes) as a fresh, previously-unseen repo �
 
 | Idea | Impact | Effort | Recommended Order |
 |------|--------|--------|-------------------|
-| Tree-sitter version skew / flaky tests (#9) | Critical | Medium | **1st** — blocks trusting any test/CI signal |
+| Tree-sitter flaky tests (#9) | Critical | Low (one deliverable left) | **1st** — narrow the remaining swallow-catch |
 | AQL/Constraints in CI (#5) | High | Low-Medium | **2nd** — reuses shipped engine |
 | Benchmark CLI (#2) | High | Low | **3rd** |
 | Graph Diff PR Comment (#1) | High | Medium | **4th** |
-| Modular Laravel support (#8) | Medium | Medium | **5th** |
-| Auto-fix Suggestions (#4) | Medium | Medium | **6th** |
-| Framework #4 + adapter kit (#3) | High | High | **7th** |
+| Go/Gin support, Phase A (#10) | High | High | **5th** — real current need, MCP value first |
+| Modular Laravel support (#8) | Medium | Medium | **6th** |
+| Auto-fix Suggestions (#4) | Medium | Medium | **7th** |
+| Framework #4 + adapter kit (#3) | High | High | superseded by #10 for the concrete case; keep for a *second* new framework |
 | Web UI Visualizer (#6) | Medium | High | **8th** |
 | OTel Runtime Expansion (#7) | High | High | **9th** |
