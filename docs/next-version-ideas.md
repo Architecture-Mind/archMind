@@ -12,6 +12,7 @@
 - ✅ **Architecture Constraints** (`@kidkender/archmind-constraints`) — define/enforce structural rules
 - ✅ **AI Context API** (`@kidkender/archmind-context`) — `buildSemanticContext()`, exposed via `archmind_get_context` MCP tool
 - ✅ **`archmind visualize`** — Execution Timeline HTML report
+- ✅ **Framework #4: Go/Gin** (`@kidkender/archmind-go-parser`, v0.8.x) — route, auth-gate (including runtime skip-lists), authz-check, validation-gate, and GORM transaction-boundary detection for Gin projects. Isolation/tenant scoping is not implemented yet.
 
 These shipped features open up new follow-on ideas below (#5, #7) that weren't possible before.
 
@@ -66,7 +67,7 @@ archmind benchmark run --all --output=results/baseline.json
 
 ---
 
-## 3. Framework thứ 4: Express.js hoặc FastAPI/Django
+## 3. Framework thứ 5: Express.js hoặc FastAPI/Django
 
 **Priority:** Medium — mở rộng reach
 **Effort:** High (nhưng thấp hơn trước — đã có 3 parser để rút pattern chung)
@@ -205,24 +206,6 @@ Every parser module still wraps its `_parser.parse()` call in a bare `catch { re
 
 ---
 
-## 10. Framework #4: Go/Gin support
-
-**Priority:** High — driven by real, current need (Claude/Cursor assisting on 3 live Go repos), not speculative reach
-**Effort:** High (new tree-sitter grammar + new parser package on par with laravel-parser)
-**Status:** Plan drafted 2026-09-03, grounded in 3 real repos — see [`docs/go-support-plan.md`](./go-support-plan.md) for full detail; not yet started
-
-Surveyed `CRM - DG Group/crm-api`, `smart-clinic/smart-clinic-api`, and `prohealth/prohealth-api` — all three share the same stack (Gin + GORM + JWT + go-playground/validator) and near-identical `cmd/`/`routes/`/`internal/{handler,service,middleware,model,dto}` layout, very likely the same personal template reused across projects. That consistency means v1 can target this specific shape narrowly instead of "Go" in general — same lesson as item #3's "don't build the adapter kit before the second framework."
-
-Two findings materially change scope vs. a naive port of the Laravel parser:
-- Route registration spans 3-4 function-call layers (`main.go` → `routes.go` → `routes/*.go`), deeper than Laravel's `RouteServiceProvider` wrapping but the same *kind* of problem, already solved once.
-- The highest-risk gap: global auth middleware (`r.Use(middleware.AuthMiddleware())`) with a **runtime skip-list keyed by method+path** inside the middleware body itself — a naive registration-site check would mark every public route (login, register, health) as authenticated. This is the Go-shaped version of the BookStack false-positive class of bug already hit once in the Laravel parser.
-
-Priority is **MCP/AI-assist value first** (`archmind_get_execution_graph` / `archmind_get_findings` giving accurate route/auth answers for these 3 repos) — CI topology-guard parity is explicitly a later goal, not v1. Phased as: **A** — routes + auth gate (ships first, unblocks most of the MCP value alone), **B** — role/authz-check + validation-gate, **C** — transaction boundary (GORM `.Transaction()` closure — directly transferable technique from Laravel) + isolation (open question, needs more reading).
-
-**Why:** Concrete, current pull (3 real repos in daily use) rather than a hypothetical reach case — different in kind from item #3's speculative "which framework 4" question, which this supersedes for the actual next framework.
-
----
-
 ## Summary Table
 
 | Idea | Impact | Effort | Recommended Order |
@@ -231,9 +214,8 @@ Priority is **MCP/AI-assist value first** (`archmind_get_execution_graph` / `arc
 | AQL/Constraints in CI (#5) | High | Low-Medium | **2nd** — reuses shipped engine |
 | Benchmark CLI (#2) | High | Low | **3rd** |
 | Graph Diff PR Comment (#1) | High | Medium | **4th** |
-| Go/Gin support, Phase A (#10) | High | High | **5th** — real current need, MCP value first |
-| Modular Laravel support (#8) | Medium | Medium | **6th** |
-| Auto-fix Suggestions (#4) | Medium | Medium | **7th** |
-| Framework #4 + adapter kit (#3) | High | High | superseded by #10 for the concrete case; keep for a *second* new framework |
+| Modular Laravel support (#8) | Medium | Medium | **5th** |
+| Auto-fix Suggestions (#4) | Medium | Medium | **6th** |
+| Framework #5 + adapter kit (#3) | High | High | **7th** — next new framework beyond Go |
 | Web UI Visualizer (#6) | Medium | High | **8th** |
 | OTel Runtime Expansion (#7) | High | High | **9th** |

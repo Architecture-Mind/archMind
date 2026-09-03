@@ -248,13 +248,11 @@ function routeToGraph(
 
 /**
  * Parses a Gin project's routing surface into one IntermediateExecutionGraph
- * per route. See docs/go-support-plan.md for the architecture this targets:
- * Phase A (routes + auth gate, honoring global-middleware skip-lists),
- * Phase B (authz-check role resolution + validation-gate from DTO binding
- * tags), and Phase C's transaction-boundary half (GORM `.Transaction()`
- * closures, one hop into a directly-called service method). Isolation
- * (tenant scoping) remains the plan's open question — not
- * implemented here.
+ * per route: routes + auth gate (honoring global-middleware skip-lists),
+ * authz-check role resolution, validation-gate from DTO binding tags, and
+ * transaction-boundary detection (GORM `.Transaction()` closures, one hop
+ * into a directly-called service method). Isolation (tenant scoping) is not
+ * implemented yet.
  */
 export function parseGinProject(files: GoSourceFile[], opts: ExtractRoutesOptions = {}): IntermediateExecutionGraph[] {
   const routes = extractRoutes(files, opts)

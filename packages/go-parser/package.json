@@ -1,6 +1,6 @@
 {
   "name": "@kidkender/archmind-go-parser",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Static analysis parser for Go/Gin projects — extracts routes, middleware chains (including runtime skip-lists), and auth patterns into ArchMind IR graphs.",
   "type": "module",
   "main": "dist/index.js",

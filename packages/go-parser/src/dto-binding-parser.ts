@@ -40,9 +40,9 @@ export function findStructFields(root: SyntaxNode, typeName: string): BoundField
  * type (e.g. "orderService" → "OrderService"), for resolving a
  * handler's `h.someService.Method(...)` call to the service type that
  * declares Method — one hop of receiver resolution beyond the handler
- * itself, needed because all 3 surveyed repos put GORM transactions in the
- * service layer, not directly in the handler (see docs/go-support-plan.md
- * §6 and Phase C). Returns null when `typeName` isn't a struct in `root`.
+ * itself, needed because real Gin projects typically put GORM transactions
+ * in the service layer, not directly in the handler. Returns null when
+ * `typeName` isn't a struct in `root`.
  */
 export function findStructFieldTypes(root: SyntaxNode, typeName: string): Map<string, string> | null {
   for (const node of walk(root)) {

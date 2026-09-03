@@ -1,4 +1,4 @@
-import { parseGo, callParts, stringLiteralValue, functionName, functionParamNames, functionParamTypes, findFunctionDecls } from "./ast.js"
+import { parseGo, callParts, stringLiteralValue, functionName, functionParamNames, functionParamTypes, findFunctionDecls, statementsOf } from "./ast.js"
 import type { SyntaxNode } from "./ast.js"
 import { shortMiddlewareName } from "./middleware-mapper.js"
 
@@ -103,7 +103,7 @@ function buildFunctionRegistry(files: ParsedFile[], entryName = "main"): Map<str
 function looksLikeGinEntrypoint(fn: SyntaxNode): boolean {
   const body = fn.childForFieldName("body")
   if (!body) return false
-  for (const node of body.namedChildren[0]?.namedChildren ?? []) {
+  for (const node of statementsOf(body)) {
     const rhs = (node.childForFieldName("right") ?? node.namedChildren[1])?.namedChildren[0]
     if (rhs?.type === "call_expression") {
       const parts = callParts(rhs)
@@ -119,7 +119,15 @@ function looksLikeGinEntrypoint(fn: SyntaxNode): boolean {
  * results, or `X.Group(...)` results) and their accumulated prefix +
  * middleware. Emits a RouteInfo for every `X.METHOD(path, ...)` call found on
  * a tracked group, and recurses into any call to another registry function
- * that receives a tracked group as an argument.
+ * that receives a tracked group as an argument, OR that itself constructs
+ * and returns a new engine (a "router factory" — `func NewRouter() *gin.Engine`
+ * — a common alternative to the inject-the-engine-as-a-parameter style; both
+ * patterns showed up across a 10-repo spot-check of real public Gin projects).
+ *
+ * Returns the GroupState of whatever this function returns via a bare
+ * `return x` where `x` is itself a tracked group at that point, so a caller
+ * assigning this function's result (`r := NewRouter()`) can bind its own
+ * local to the right state. Returns undefined when nothing qualifies.
  */
 function walkFunctionBody(
   fn: FunctionEntry,
@@ -127,22 +135,34 @@ function walkFunctionBody(
   registry: Map<string, FunctionEntry>,
   routes: RouteInfo[],
   visiting: Set<string>
-): void {
-  if (visiting.has(fn.name)) return // guard against accidental recursion
+): GroupState | undefined {
+  if (visiting.has(fn.name)) return undefined // guard against accidental recursion
   visiting.add(fn.name)
 
   const body = fn.node.childForFieldName("body")
-  if (!body) { visiting.delete(fn.name); return }
+  if (!body) { visiting.delete(fn.name); return undefined }
 
   const groups = new Map(initialGroups)
   const paramTypes = functionParamTypes(fn.node)
-  const statements = body.namedChildren[0]?.namedChildren ?? [] // statement_list
+  const statements = statementsOf(body)
 
   for (const stmt of statements) {
     handleStatement(stmt, fn.file, groups, paramTypes, registry, routes, visiting)
   }
 
   visiting.delete(fn.name)
+  return findReturnedGroupState(statements, groups)
+}
+
+/** Scans for a `return x` statement where `x` is a bare identifier that's a tracked group. */
+function findReturnedGroupState(statements: SyntaxNode[], groups: Map<string, GroupState>): GroupState | undefined {
+  for (const stmt of statements) {
+    if (stmt.type !== "return_statement") continue
+    const exprList = stmt.namedChildren[0]
+    const expr = exprList?.type === "expression_list" ? exprList.namedChildren[0] : exprList
+    if (expr?.type === "identifier" && groups.has(expr.text)) return groups.get(expr.text)
+  }
+  return undefined
 }
 
 function handleStatement(
@@ -154,6 +174,18 @@ function handleStatement(
   routes: RouteInfo[],
   visiting: Set<string>
 ): void {
+  // Bare `{ ... }` scoping block — a common Go idiom for visually grouping a
+  // route group's registrations (`apiv1 := r.Group(...); apiv1.Use(...); {
+  // apiv1.GET(...) ... }`). Not a control-flow construct, just lexical
+  // scoping — its statements execute unconditionally, in order, same as if
+  // the braces weren't there, so recurse into it directly.
+  if (stmt.type === "block") {
+    for (const inner of statementsOf(stmt)) {
+      handleStatement(inner, file, groups, paramTypes, registry, routes, visiting)
+    }
+    return
+  }
+
   // `local := expr` or `local = expr` — check if expr is a group-producing call
   if (stmt.type === "short_var_declaration" || stmt.type === "assignment_statement") {
     const left  = stmt.childForFieldName("left")  ?? stmt.namedChildren[0]
@@ -173,6 +205,15 @@ function handleStatement(
           prefix:     parent.prefix + suffix,
           middleware: [...parent.middleware, ...inlineMw],
         })
+      } else if (parts) {
+        // Router-factory pattern: `local := SomeRegisteredFn(...)` where the
+        // callee builds (and returns) its own engine internally, rather than
+        // receiving one as a parameter.
+        const callee = registry.get(parts.method)
+        if (callee) {
+          const returned = walkFunctionBody(callee, resolveDelegationArgs(parts, callee, groups), registry, routes, visiting)
+          if (returned) groups.set(targetName, returned)
+        }
       }
     }
     return
@@ -222,20 +263,30 @@ function handleStatement(
   // same "resolve by name across the whole project" approach the function
   // registry itself uses.
   const callee = registry.get(parts.method)
-  if (callee && callee.node !== undefined) {
-    const paramNames = functionParamNames(callee.node)
-    const childInitial = new Map<string, GroupState>()
-    parts.args.forEach((argNode, i) => {
-      const paramName = paramNames[i]
-      const argIdent = argNode.type === "identifier" ? argNode.text : null
-      if (paramName && argIdent && groups.has(argIdent)) {
-        childInitial.set(paramName, groups.get(argIdent)!)
-      }
-    })
+  if (callee) {
+    const childInitial = resolveDelegationArgs(parts, callee, groups)
     if (childInitial.size > 0) {
       walkFunctionBody(callee, childInitial, registry, routes, visiting)
     }
   }
+}
+
+/** Maps a call's argument identifiers to the callee's matching parameter name, for every arg that's a currently-tracked group. */
+function resolveDelegationArgs(
+  parts: { args: SyntaxNode[] },
+  callee: FunctionEntry,
+  groups: Map<string, GroupState>
+): Map<string, GroupState> {
+  const paramNames = functionParamNames(callee.node)
+  const childInitial = new Map<string, GroupState>()
+  parts.args.forEach((argNode, i) => {
+    const paramName = paramNames[i]
+    const argIdent = argNode.type === "identifier" ? argNode.text : null
+    if (paramName && argIdent && groups.has(argIdent)) {
+      childInitial.set(paramName, groups.get(argIdent)!)
+    }
+  })
+  return childInitial
 }
 
 /**

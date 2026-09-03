@@ -45,6 +45,18 @@ export function functionBody(fn: SyntaxNode): SyntaxNode | null {
   return fn.childForFieldName("body")
 }
 
+/**
+ * Top-level statements directly inside a `block` node (a function body or a
+ * bare `{ ... }` scoping block). NOT indexed positionally — a leading
+ * comment is itself a named sibling of `statement_list` inside the block, so
+ * `block.namedChildren[0]` is the comment, not the statement list, whenever
+ * the block's first line is commented. Returns [] for an empty block.
+ */
+export function statementsOf(block: SyntaxNode): SyntaxNode[] {
+  const stmtList = block.namedChildren.find((c) => c.type === "statement_list")
+  return stmtList ? stmtList.namedChildren : []
+}
+
 /** Unwraps pointer_type/qualified_type down to the bare type_identifier name, e.g. "*handler.OrderHandler" → "OrderHandler". */
 export function bareTypeName(typeNode: SyntaxNode): string | null {
   let n: SyntaxNode | null = typeNode

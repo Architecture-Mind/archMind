@@ -80,9 +80,9 @@ export function hasAnyTrackedFileChanged(projectRoot: string): boolean {
 }
 
 // ── Go: whole-project re-parse on any change (no incremental parse cache yet,
-// unlike Laravel's ParseCache/NestJS's warm ts-morph Project — see
-// docs/go-support-plan.md; correctness over parse speed for v1). Detects both
-// edits to tracked files and newly added/removed .go files. ──────────────────
+// unlike Laravel's ParseCache/NestJS's warm ts-morph Project —
+// correctness over parse speed for v1). Detects both edits to tracked
+// files and newly added/removed .go files. ──────────────────────────
 
 function hasAnyGoFileChanged(projectRoot: string): boolean {
   const index = goTrackedFiles.get(projectRoot)

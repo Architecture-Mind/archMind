@@ -3,11 +3,10 @@ import { IR_NODE_TYPES } from "@kidkender/archmind-protocol"
 import { parseGinProject } from "../graph-builder.js"
 import type { GoSourceFile } from "../route-parser.js"
 
-// Synthetic fixtures matching the real-world shape surveyed in
-// docs/go-support-plan.md (generic Task domain, not any client's actual
-// business code): main.go applies AuthMiddleware globally with an internal
-// skip-list, routes.go aggregates per-domain registrars, each registrar
-// creates its own sub-group.
+// Synthetic fixtures (generic Task domain, not any real project's actual
+// business code) matching a common real-world Gin project shape: main.go
+// applies AuthMiddleware globally with an internal skip-list, routes.go
+// aggregates per-domain registrars, each registrar creates its own sub-group.
 
 const MAIN_GO: GoSourceFile = {
   path: "cmd/server/main.go",
@@ -486,5 +485,73 @@ describe("parseGinProject — multiple func main() across cmd/*", () => {
     const graphs = parseGinProject([MAIN_GO, AUTH_MIDDLEWARE_GO, ROUTES_GO, AUTH_ROUTES_GO, TASK_ROUTES_GO, SEED_MAIN_GO])
     expect(graphs.length).toBeGreaterThan(0)
     expect(graphs.some((g) => g.entrypoint === "POST /api/v1/auth/login")).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Router-factory pattern + bare scoping block + leading-comment robustness —
+// found via a 10-repo spot-check against real public Gin projects (not the
+// inject-the-engine-as-a-parameter style the earlier fixtures cover).
+// ---------------------------------------------------------------------------
+
+const MAIN_WITH_FACTORY_GO: GoSourceFile = {
+  path: "main.go",
+  content: `
+package main
+
+func main() {
+	routerInit := routers.InitRouter()
+	routerInit.Run(":8000")
+}
+`,
+}
+
+// Mirrors the real shape found in eddycjy/go-gin-example: the router-building
+// function constructs its OWN engine and returns it (rather than receiving
+// one as a parameter), registers some routes directly, then groups the rest
+// inside a bare `{ ... }` scoping block whose first line is a comment.
+const FACTORY_ROUTER_GO: GoSourceFile = {
+  path: "routers/router.go",
+  content: `
+package routers
+
+func InitRouter() *gin.Engine {
+	r := gin.New()
+	r.Use(gin.Recovery())
+	r.POST("/auth", api.GetAuth)
+
+	apiv1 := r.Group("/api/v1")
+	apiv1.Use(middleware.AuthMiddleware())
+	{
+		// get tag list
+		apiv1.GET("/tags", v1.GetTags)
+		// create tag
+		apiv1.POST("/tags", v1.AddTag)
+	}
+
+	return r
+}
+`,
+}
+
+describe("parseGinProject — router-factory function (engine built + returned, not injected)", () => {
+  const graphs = parseGinProject([MAIN_WITH_FACTORY_GO, FACTORY_ROUTER_GO])
+
+  test("routes registered directly in the factory function are found", () => {
+    expect(graphs.some((g) => g.entrypoint === "POST /auth")).toBe(true)
+  })
+
+  test("routes registered inside a bare { } scoping block are found, including when the block's first line is a comment", () => {
+    expect(graphs.some((g) => g.entrypoint === "GET /api/v1/tags")).toBe(true)
+    expect(graphs.some((g) => g.entrypoint === "POST /api/v1/tags")).toBe(true)
+  })
+
+  test("middleware applied to the group before the block still applies to routes inside it", () => {
+    const g = graphs.find((g) => g.entrypoint === "GET /api/v1/tags")!
+    expect(g.nodes.some((n) => n.type === IR_NODE_TYPES.AUTH_GATE)).toBe(true)
+  })
+
+  test("finds exactly 3 routes total (no under- or over-counting)", () => {
+    expect(graphs).toHaveLength(3)
   })
 })

@@ -35,8 +35,8 @@ export function irTypeForMiddleware(shortName: string): string {
 // Skip-list extraction
 // ---------------------------------------------------------------------------
 // A globally-`Use()`d auth middleware commonly carries its own exemption list
-// instead of being left off exempt routes at the registration site (see
-// docs/go-support-plan.md §2). Shape observed in all 3 surveyed repos:
+// instead of being left off exempt routes at the registration site. Shape
+// observed across multiple real Gin projects:
 //
 //   skipRoutes := map[skipKey]bool{
 //       {http.MethodPost, "/api/v1/auth/register"}: true,

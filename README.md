@@ -209,7 +209,7 @@ DELETE /api/vaults/{id}
 - `RequireRole`/`RequireSystemRole`-style authorization checks, with Go `const` role/permission arguments resolved to their declared value
 - `ShouldBindJSON`/`ShouldBindQuery`/`ShouldBindUri` resolved to the bound DTO struct's `binding:"..."` validation tags
 - GORM `db.Transaction(func(tx *gorm.DB) error {...})` closures, including one hop into a directly-called service method (handlers are typically thin; the transaction usually lives in the service layer)
-- Scoped to a Gin + GORM + `internal/{handler,service,middleware,model,dto}` project layout — see `docs/go-support-plan.md` for what's in and out of scope. Tenant/isolation scoping isn't implemented yet.
+- Scoped to a Gin + GORM + `internal/{handler,service,middleware,model,dto}` project layout Tenant/isolation scoping isn't implemented yet.
 
 ---
 
