@@ -1,7 +1,7 @@
 {
   "name": "@kidkender/archmind-mcp",
   "version": "0.5.1",
-  "description": "ArchMind MCP server — semantic execution graph intelligence for Laravel and NestJS projects, wired into Claude Code and any MCP-compatible AI client.",
+  "description": "ArchMind MCP server — semantic execution graph intelligence for Laravel, NestJS, and Go/Gin projects, wired into Claude Code and any MCP-compatible AI client.",
   "type": "module",
   "bin": {
     "archmind-mcp": "dist/index.cjs"
@@ -19,6 +19,7 @@
   "devDependencies": {
     "@kidkender/archmind-laravel-parser": "*",
     "@kidkender/archmind-nestjs-parser": "*",
+    "@kidkender/archmind-go-parser": "*",
     "@kidkender/archmind-retrieval": "*",
     "@kidkender/archmind-explainer": "*",
     "@kidkender/archmind-protocol": "*",

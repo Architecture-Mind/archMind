@@ -20,6 +20,7 @@
     "@kidkender/archmind-laravel-parser": "*",
     "@kidkender/archmind-nestjs-parser": "*",
     "@kidkender/archmind-springboot-parser": "*",
+    "@kidkender/archmind-go-parser": "*",
     "@kidkender/archmind-protocol": "*",
     "@types/node": "^20.0.0",
     "esbuild": "^0.28.0",

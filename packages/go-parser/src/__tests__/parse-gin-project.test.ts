@@ -458,3 +458,33 @@ describe("parseGinProject — transaction boundary via one-hop service resolutio
     expect(g.nodes.some((n) => n.type === IR_NODE_TYPES.TXN_BOUNDARY)).toBe(false)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Multiple cmd/*/main.go entrypoints — real pattern (prohealth-api has
+// cmd/server, cmd/seed, cmd/notification, each with their own func main()).
+// ---------------------------------------------------------------------------
+
+const SEED_MAIN_GO: GoSourceFile = {
+  path: "cmd/seed/main.go",
+  content: `
+package main
+
+func main() {
+	fmt.Println("seeding database")
+}
+`,
+}
+
+describe("parseGinProject — multiple func main() across cmd/*", () => {
+  test("picks the Gin-constructing main() regardless of file order (seed before server)", () => {
+    const graphs = parseGinProject([SEED_MAIN_GO, MAIN_GO, AUTH_MIDDLEWARE_GO, ROUTES_GO, AUTH_ROUTES_GO, TASK_ROUTES_GO])
+    expect(graphs.length).toBeGreaterThan(0)
+    expect(graphs.some((g) => g.entrypoint === "POST /api/v1/auth/login")).toBe(true)
+  })
+
+  test("picks the Gin-constructing main() regardless of file order (server before seed)", () => {
+    const graphs = parseGinProject([MAIN_GO, AUTH_MIDDLEWARE_GO, ROUTES_GO, AUTH_ROUTES_GO, TASK_ROUTES_GO, SEED_MAIN_GO])
+    expect(graphs.length).toBeGreaterThan(0)
+    expect(graphs.some((g) => g.entrypoint === "POST /api/v1/auth/login")).toBe(true)
+  })
+})

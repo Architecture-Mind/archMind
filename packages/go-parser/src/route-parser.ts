@@ -78,17 +78,39 @@ function toMiddlewareRef(node: SyntaxNode, file: string): MiddlewareRef | null {
  * ignoring package boundaries — the same approach Laravel's parser takes for
  * controller resolution across a project's namespace. Last declaration wins
  * on a name collision (acceptable for v1: same-named route registrars across
- * unrelated packages are not a pattern observed in any of the 3 surveyed repos).
+ * unrelated packages are not a pattern observed in any of the 3 surveyed repos)
+ * — EXCEPT for the entry function itself (default "main"), which commonly
+ * collides across `cmd/server/main.go`, `cmd/seed/main.go`,
+ * `cmd/worker/main.go`, etc. in exactly this project layout. For that name,
+ * prefer whichever declaration's body actually constructs a Gin engine
+ * (`gin.Default()`/`gin.New()`) — the one real web-server entrypoint — over
+ * an arbitrary last-wins pick that could silently resolve to a CLI script's
+ * empty main() instead.
  */
-function buildFunctionRegistry(files: ParsedFile[]): Map<string, FunctionEntry> {
+function buildFunctionRegistry(files: ParsedFile[], entryName = "main"): Map<string, FunctionEntry> {
   const registry = new Map<string, FunctionEntry>()
   for (const file of files) {
     for (const fn of findFunctionDecls(file.root)) {
       const name = functionName(fn)
-      if (name) registry.set(name, { name, node: fn, file: file.path })
+      if (!name) continue
+      if (name === entryName && registry.has(entryName) && !looksLikeGinEntrypoint(fn)) continue
+      registry.set(name, { name, node: fn, file: file.path })
     }
   }
   return registry
+}
+
+function looksLikeGinEntrypoint(fn: SyntaxNode): boolean {
+  const body = fn.childForFieldName("body")
+  if (!body) return false
+  for (const node of body.namedChildren[0]?.namedChildren ?? []) {
+    const rhs = (node.childForFieldName("right") ?? node.namedChildren[1])?.namedChildren[0]
+    if (rhs?.type === "call_expression") {
+      const parts = callParts(rhs)
+      if (parts && isEngineConstructor(parts)) return true
+    }
+  }
+  return false
 }
 
 /**
@@ -249,9 +271,9 @@ export interface ExtractRoutesOptions {
  */
 export function extractRoutes(files: GoSourceFile[], opts: ExtractRoutesOptions = {}): RouteInfo[] {
   const parsed: ParsedFile[] = files.map((f) => ({ path: f.path, root: parseGo(f.content) }))
-  const registry = buildFunctionRegistry(parsed)
-
   const entryName = opts.entryFunction ?? "main"
+  const registry = buildFunctionRegistry(parsed, entryName)
+
   const entry = registry.get(entryName)
   if (!entry) return []
 
