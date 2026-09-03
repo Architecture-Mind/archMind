@@ -253,7 +253,7 @@ function routeToGraph(
  * Phase B (authz-check role resolution + validation-gate from DTO binding
  * tags), and Phase C's transaction-boundary half (GORM `.Transaction()`
  * closures, one hop into a directly-called service method). Isolation
- * (tenant/hospital scoping) remains the plan's open question — not
+ * (tenant scoping) remains the plan's open question — not
  * implemented here.
  */
 export function parseGinProject(files: GoSourceFile[], opts: ExtractRoutesOptions = {}): IntermediateExecutionGraph[] {

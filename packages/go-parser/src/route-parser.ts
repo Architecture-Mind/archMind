@@ -13,7 +13,7 @@ export interface MiddlewareRef {
   shortName: string
   /** Raw call text as written, e.g. "middleware.RequireRole(model.RoleAdmin)". */
   text: string
-  /** Raw argument texts, e.g. ["model.RoleAdmin", "model.RoleDoctor"]. */
+  /** Raw argument texts, e.g. ["model.RoleAdmin", "model.RoleManager"]. */
   args: string[]
   file: string
   line: number
@@ -23,9 +23,9 @@ export interface RouteInfo {
   method: string
   /** Fully resolved path — concatenation of every enclosing Group() prefix. */
   path: string
-  /** Raw text of the final (handler) argument, e.g. "handler.RegisterAppointment". */
+  /** Raw text of the final (handler) argument, e.g. "handler.CreateOrder". */
   handlerText: string
-  /** Bare struct type of the handler's receiver (e.g. "AppointmentHandler"), when resolvable — needed to look up the method body for validation-gate detection. */
+  /** Bare struct type of the handler's receiver (e.g. "OrderHandler"), when resolvable — needed to look up the method body for validation-gate detection. */
   handlerReceiverType?: string
   /** Middleware in application order: inherited group middleware first, then inline. */
   middleware: MiddlewareRef[]
@@ -241,8 +241,8 @@ function handleStatement(
 /**
  * For a handler expression `paramName.MethodName`, resolves paramName's
  * declared type from the enclosing function's own parameters — e.g. given
- * `func RegisterAppointmentRoutes(router gin.IRouter, handler *handler.AppointmentHandler)`
- * and the call `handler.RegisterAppointment`, returns "AppointmentHandler".
+ * `func RegisterOrderRoutes(router gin.IRouter, handler *handler.OrderHandler)`
+ * and the call `handler.CreateOrder`, returns "OrderHandler".
  * Returns undefined for anything else (bare function reference, unresolvable
  * receiver) — validation-gate detection is simply skipped for that route.
  */

@@ -7,7 +7,7 @@ export interface HandlerMethod {
   line: number
 }
 
-/** Registry keyed "ReceiverType.MethodName", e.g. "AppointmentHandler.RegisterAppointment". */
+/** Registry keyed "ReceiverType.MethodName", e.g. "OrderHandler.CreateOrder". */
 export function buildMethodRegistry(files: { path: string; root: SyntaxNode }[]): Map<string, HandlerMethod> {
   const registry = new Map<string, HandlerMethod>()
   for (const file of files) {
@@ -54,7 +54,7 @@ export function findBindCalls(body: SyntaxNode): BindCall[] {
 /**
  * Resolves `varName`'s declared struct type within `body` — covers both
  * `var req dto.X` and `req := dto.X{}` — returning the bare type name
- * (e.g. "RegisterAppointmentRequest").
+ * (e.g. "CreateOrderRequest").
  */
 export function resolveVarDtoType(body: SyntaxNode, varName: string): string | null {
   for (const node of walk(body)) {

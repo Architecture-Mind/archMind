@@ -45,7 +45,7 @@ export function functionBody(fn: SyntaxNode): SyntaxNode | null {
   return fn.childForFieldName("body")
 }
 
-/** Unwraps pointer_type/qualified_type down to the bare type_identifier name, e.g. "*handler.AppointmentHandler" → "AppointmentHandler". */
+/** Unwraps pointer_type/qualified_type down to the bare type_identifier name, e.g. "*handler.OrderHandler" → "OrderHandler". */
 export function bareTypeName(typeNode: SyntaxNode): string | null {
   let n: SyntaxNode | null = typeNode
   while (n && n.type === "pointer_type") n = n.namedChildren[0] ?? null
@@ -55,7 +55,7 @@ export function bareTypeName(typeNode: SyntaxNode): string | null {
   return null
 }
 
-/** Parameter name → bare declared type name, e.g. {"router": "IRouter", "handler": "AppointmentHandler"}. */
+/** Parameter name → bare declared type name, e.g. {"router": "IRouter", "handler": "OrderHandler"}. */
 export function functionParamTypes(fn: SyntaxNode): Map<string, string> {
   const params = fn.childForFieldName("parameters")
   const map = new Map<string, string>()
@@ -70,7 +70,7 @@ export function functionParamTypes(fn: SyntaxNode): Map<string, string> {
   return map
 }
 
-/** The receiver's bare type name for a method_declaration, e.g. "(h *AppointmentHandler)" → "AppointmentHandler". Null for a plain function_declaration. */
+/** The receiver's bare type name for a method_declaration, e.g. "(h *OrderHandler)" → "OrderHandler". Null for a plain function_declaration. */
 export function receiverTypeName(fn: SyntaxNode): string | null {
   const receiver = fn.childForFieldName("receiver")
   if (!receiver) return null

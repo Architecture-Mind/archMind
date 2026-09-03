@@ -37,7 +37,7 @@ export function findStructFields(root: SyntaxNode, typeName: string): BoundField
 
 /**
  * Finds `type <name> struct { ... }` and returns field name → bare declared
- * type (e.g. "appointmentService" → "AppointmentService"), for resolving a
+ * type (e.g. "orderService" → "OrderService"), for resolving a
  * handler's `h.someService.Method(...)` call to the service type that
  * declares Method — one hop of receiver resolution beyond the handler
  * itself, needed because all 3 surveyed repos put GORM transactions in the
