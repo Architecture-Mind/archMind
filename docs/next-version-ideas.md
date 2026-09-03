@@ -171,14 +171,50 @@ archmind serve --project . --port 4000
 
 ---
 
+## 8. Modular Laravel support (nwidart/laravel-modules)
+
+**Priority:** Medium — real gap found via cross-repo benchmarking, not yet scoped into any plan
+**Effort:** Medium
+**Status:** Not started
+
+Benchmarked against akaunting (642 routes) as a fresh, previously-unseen repo — archMind parsed cleanly (no crashes) but stayed almost silent (6/58 auth-gate/unknown-middleware nodes, 0 service_call/guard/txn/branch nodes despite 642 routes). Root cause: akaunting is a modular Laravel app (`nwidart/laravel-modules` or similar) — real controllers live under `modules/*/Http/Controllers/`, not `app/Http/Controllers/` as the parser assumes. This is a distinct architecture gap from the 6 gaps already fixed for IR v1.5 (koel/BookStack-driven), confirmed independently on invoiceninja and monica (both generalized cleanly with zero changes).
+
+**Deliverables:**
+- Detect `nwidart/laravel-modules`-style layouts (presence of `modules/` dir + module `.json`/service provider registration)
+- Extend controller/namespace resolution (`project-config.ts`, `fqcnToPath`) to resolve module-scoped namespaces
+- Add a benchmark fixture from a real modular Laravel app to `research/golden-traces` to lock in the fix
+
+**Why:** Silent parsing on a whole class of real-world Laravel apps (module-based, common in larger commercial codebases) is worse than an explicit "unsupported" signal — it looks like a clean pass with nothing to report.
+
+---
+
+## 9. Tree-sitter dependency version skew causing flaky parser tests
+
+**Priority:** High — undermines trust in the whole test suite and any CI built on top of it
+**Effort:** Medium (needs careful upgrade + full regression pass, not a blind bump)
+**Status:** Root-caused 2026-09-03, not yet fixed
+
+`packages/laravel-parser` pins `tree-sitter@^0.21.0` but `tree-sitter-php@^0.23.12` — the grammar binding is built against a newer core ABI than the runtime provides. 14 files each hold a module-level `new Parser()` singleton (correct pattern in isolation), but when many of these singletons parse heavily in the *same process* (e.g. `npm test` running all 18 test suites in one Jest worker), `_parser.parse(source)` intermittently throws. Every parser module wraps that call in a bare `catch { return <empty defaults> }`, so the throw is swallowed and silently reported as "nothing found" instead of a hard failure — which is what made this invisible for so long (confirmed while fixing the AUTH-002 retrieval regression: `isolation-parser.test.ts` passes 3/3 in isolation but randomly fails when run with the other 17 suites; failure count scales with worker contention — 24-49 failures/283 tests with default parallelism, 201/283 under `-w 1` where every suite shares one process).
+
+**Deliverables:**
+- Upgrade `tree-sitter`/`tree-sitter-php` to a matched, current pair (latest `tree-sitter` is 0.25.1) and re-run the full suite for stability across multiple repeated runs, not just once
+- Replace the blanket `catch { return emptyDefaults }` in each parser module with a narrower catch (file-not-found only) so a real parse failure surfaces loudly instead of reading as "no findings"
+- Re-enable CI test gating only after the suite is confirmed deterministic across N repeated runs
+
+**Why:** This is very likely *why* there's no CI on this repo at all — a red/green result that changes every run isn't a gate anyone can trust. It's also why the AUTH-002 regression (`permission-constant` reachability, fixed in `graph-augmenter.ts`) went unnoticed for a full release cycle: nobody could tell a real regression from noise.
+
+---
+
 ## Summary Table
 
 | Idea | Impact | Effort | Recommended Order |
 |------|--------|--------|-------------------|
-| AQL/Constraints in CI (#5) | High | Low-Medium | **1st** — reuses shipped engine |
-| Benchmark CLI (#2) | High | Low | **2nd** |
-| Graph Diff PR Comment (#1) | High | Medium | **3rd** |
-| Auto-fix Suggestions (#4) | Medium | Medium | **4th** |
-| Framework #4 + adapter kit (#3) | High | High | **5th** |
-| Web UI Visualizer (#6) | Medium | High | **6th** |
-| OTel Runtime Expansion (#7) | High | High | **7th** |
+| Tree-sitter version skew / flaky tests (#9) | Critical | Medium | **1st** — blocks trusting any test/CI signal |
+| AQL/Constraints in CI (#5) | High | Low-Medium | **2nd** — reuses shipped engine |
+| Benchmark CLI (#2) | High | Low | **3rd** |
+| Graph Diff PR Comment (#1) | High | Medium | **4th** |
+| Modular Laravel support (#8) | Medium | Medium | **5th** |
+| Auto-fix Suggestions (#4) | Medium | Medium | **6th** |
+| Framework #4 + adapter kit (#3) | High | High | **7th** |
+| Web UI Visualizer (#6) | Medium | High | **8th** |
+| OTel Runtime Expansion (#7) | High | High | **9th** |

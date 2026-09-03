@@ -58,10 +58,10 @@ describe("serializeExecutionPath", () => {
     expect(out).toContain("[next_middleware]")
   })
 
-  test("serializes edge from → to", () => {
+  test("serializes edge from → to using resolved symbols, not raw node ids", () => {
     const out = serializeExecutionPath(AUTH_GRAPH)
-    expect(out).toContain("ctrl →")
-    expect(out).toContain("→ pol")
+    expect(out).toContain("TaskController::update →")
+    expect(out).toContain("→ TaskPolicy::update")
   })
 
   test("includes args when present on node", () => {

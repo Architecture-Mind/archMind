@@ -19,7 +19,12 @@ import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 const FAKE_GRAPHS: IntermediateExecutionGraph[] = []
 
 function makeTmp(prefix = "archmind-cache-test"): string {
-  const dir = join(tmpdir(), `${prefix}-${Date.now()}`)
+  // Date.now() alone collides: consecutive tests in this file can complete
+  // within the same millisecond, reusing the same dir and leaking files
+  // (e.g. "includes archmind.json when present" writing into the dir the
+  // very next "excludes ... when absent" test then reads).
+  const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const dir = join(tmpdir(), `${prefix}-${unique}`)
   mkdirSync(dir, { recursive: true })
   return dir
 }

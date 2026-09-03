@@ -6,7 +6,7 @@ import type {
   RetrievalResult,
   RetrievalFocus,
 } from "@kidkender/archmind-protocol"
-import { PROTOCOL_VERSION } from "@kidkender/archmind-protocol"
+import { PROTOCOL_VERSION, toIRNodeType } from "@kidkender/archmind-protocol"
 import { estimateSerializedTokens } from "./serializer.js"
 
 export type RetrievalRelevance = "HIGH" | "MEDIUM" | "LOW"
@@ -263,7 +263,10 @@ const RELEVANCE_ORDER: Record<RetrievalRelevance, number> = {
 }
 
 export function classifyNode(node: ExecutionNode): RetrievalRelevance {
-  return NODE_TYPE_RELEVANCE[node.type] ?? "LOW"
+  // NODE_TYPE_RELEVANCE is keyed by canonical "ir:" types; normalize first so
+  // legacy (pre-IR-migration) type strings still classify correctly instead of
+  // silently falling through to LOW for everything.
+  return NODE_TYPE_RELEVANCE[toIRNodeType(node.type)] ?? "LOW"
 }
 
 // ---- Entrypoint matching ----------------------------------------------

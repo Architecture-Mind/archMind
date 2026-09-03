@@ -1,5 +1,6 @@
 import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { IR_NODE_TYPES, IR_EDGE_RELATIONS } from "@kidkender/archmind-protocol"
+import { query } from "@kidkender/archmind-graph-query"
 import { buildExecutionPath } from "../evidence/selector.js"
 import type {
   TracePattern,
@@ -121,7 +122,7 @@ function traceIsolation(graphs: IntermediateExecutionGraph[]): TraceResult<Isola
   for (const g of graphs) {
     const unscoped_queries = g.nodes.filter((n) => n.type === IR_NODE_TYPES.UNSCOPED_QUERY).map((n) => n.symbol)
     const unscoped_writes  = g.nodes.filter((n) => n.type === IR_NODE_TYPES.UNSCOPED_WRITE).map((n) => n.symbol)
-    const has_tenant_context = g.nodes.some((n) => n.type === IR_NODE_TYPES.TENANT_CONTEXT)
+    const has_tenant_context = query(g).data().hasTenantContext()
 
     if (unscoped_queries.length === 0 && unscoped_writes.length === 0) continue
 
