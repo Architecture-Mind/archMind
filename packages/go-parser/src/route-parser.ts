@@ -1,4 +1,4 @@
-import { parseGo, walk, callParts, stringLiteralValue, functionName, functionParamNames, findFunctionDecls } from "./ast.js"
+import { parseGo, callParts, stringLiteralValue, functionName, functionParamNames, functionParamTypes, findFunctionDecls } from "./ast.js"
 import type { SyntaxNode } from "./ast.js"
 import { shortMiddlewareName } from "./middleware-mapper.js"
 
@@ -25,6 +25,8 @@ export interface RouteInfo {
   path: string
   /** Raw text of the final (handler) argument, e.g. "handler.RegisterAppointment". */
   handlerText: string
+  /** Bare struct type of the handler's receiver (e.g. "AppointmentHandler"), when resolvable — needed to look up the method body for validation-gate detection. */
+  handlerReceiverType?: string
   /** Middleware in application order: inherited group middleware first, then inline. */
   middleware: MiddlewareRef[]
   file: string
@@ -111,10 +113,11 @@ function walkFunctionBody(
   if (!body) { visiting.delete(fn.name); return }
 
   const groups = new Map(initialGroups)
+  const paramTypes = functionParamTypes(fn.node)
   const statements = body.namedChildren[0]?.namedChildren ?? [] // statement_list
 
   for (const stmt of statements) {
-    handleStatement(stmt, fn.file, groups, registry, routes, visiting)
+    handleStatement(stmt, fn.file, groups, paramTypes, registry, routes, visiting)
   }
 
   visiting.delete(fn.name)
@@ -124,6 +127,7 @@ function handleStatement(
   stmt: SyntaxNode,
   file: string,
   groups: Map<string, GroupState>,
+  paramTypes: Map<string, string>,
   registry: Map<string, FunctionEntry>,
   routes: RouteInfo[],
   visiting: Set<string>
@@ -179,12 +183,13 @@ function handleStatement(
       .filter((m): m is MiddlewareRef => !!m)
 
     routes.push({
-      method:      parts.method,
-      path:        state.prefix + suffix,
-      handlerText: handlerArg.text,
-      middleware:  [...state.middleware, ...inlineMw],
+      method:              parts.method,
+      path:                state.prefix + suffix,
+      handlerText:         handlerArg.text,
+      handlerReceiverType: handlerReceiverType(handlerArg, paramTypes),
+      middleware:          [...state.middleware, ...inlineMw],
       file,
-      line:        toLine(call),
+      line:                toLine(call),
     })
     return
   }
@@ -209,6 +214,21 @@ function handleStatement(
       walkFunctionBody(callee, childInitial, registry, routes, visiting)
     }
   }
+}
+
+/**
+ * For a handler expression `paramName.MethodName`, resolves paramName's
+ * declared type from the enclosing function's own parameters — e.g. given
+ * `func RegisterAppointmentRoutes(router gin.IRouter, handler *handler.AppointmentHandler)`
+ * and the call `handler.RegisterAppointment`, returns "AppointmentHandler".
+ * Returns undefined for anything else (bare function reference, unresolvable
+ * receiver) — validation-gate detection is simply skipped for that route.
+ */
+function handlerReceiverType(handlerArg: SyntaxNode, paramTypes: Map<string, string>): string | undefined {
+  if (handlerArg.type !== "selector_expression") return undefined
+  const operand = handlerArg.childForFieldName("operand")
+  if (!operand || operand.type !== "identifier") return undefined
+  return paramTypes.get(operand.text)
 }
 
 export interface ExtractRoutesOptions {

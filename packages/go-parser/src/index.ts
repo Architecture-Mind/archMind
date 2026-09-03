@@ -1,3 +1,6 @@
 export { parseGinProject } from "./graph-builder.js"
 export { extractRoutes, type GoSourceFile, type RouteInfo, type MiddlewareRef, type ExtractRoutesOptions } from "./route-parser.js"
 export { classifyMiddlewareName, irTypeForMiddleware, extractSkipList, type SkipEntry, type MiddlewareClassification } from "./middleware-mapper.js"
+export { buildConstRegistry, resolveConstExpr } from "./const-resolver.js"
+export { findStructFields, resolveDtoBinding, type BoundField } from "./dto-binding-parser.js"
+export { buildMethodRegistry, findBindCalls, resolveVarDtoType, type BindCall, type HandlerMethod } from "./handler-parser.js"
