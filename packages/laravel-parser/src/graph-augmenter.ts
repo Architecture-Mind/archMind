@@ -300,21 +300,37 @@ export function augmentGraph(
   // this route — emitting every constant from every such file regardless of relevance
   // let an LLM mistake "PermissionStatus is defined somewhere in this project" for "this
   // route enforces a permission check" (found on BookStack's GET /status, a genuinely
-  // public route). Only emit constants for a permission class that's actually referenced
-  // by name in a file already reachable from this route (controller, service calls,
-  // middleware, FormRequest, etc. — i.e. everything collected into newNodes so far).
+  // public route). Only emit a constant when it's tied to this route by one of two signals:
+  // its class is referenced by name in a file already reachable from the route (controller,
+  // service calls, middleware, FormRequest, etc.), or its literal value matches an arg
+  // already captured on an auth/authz node in this graph (e.g. middleware('permission:task.delete')
+  // passes the string literal, never the class name, so the graph node's `args` is the only
+  // evidence available — common pattern, doesn't reintroduce the BookStack false positive
+  // since an unrelated public route has no auth/authz node args to match against).
   const reachableSource = [...new Set(newNodes.map((n) => n.file).filter((f): f is string => !!f))]
     .map((relFile) => {
       try { return readFileSync(join(opts.projectRoot, relFile), "utf-8") } catch { return "" }
     })
     .join("\n")
 
+  const reachableAuthArgs = new Set(
+    newNodes
+      .filter((n) => n.type === IR_NODE_TYPES.AUTH_GATE || n.type === IR_NODE_TYPES.AUTHZ_CHECK)
+      .flatMap((n) => n.args ?? [])
+  )
+
   for (const relFile of permFiles) {
     const absPath = join(opts.projectRoot, relFile)
     const map = parseConstantClass(absPath)
     for (const [className, constants] of Object.entries(map)) {
-      if (!reachableSource.includes(`${className}::`)) continue
-      const permNodes = extractPermissionNodes({ [className]: constants }, relFile)
+      const classReachable = reachableSource.includes(`${className}::`)
+      const matchedConstants = classReachable
+        ? constants
+        : Object.fromEntries(
+            Object.entries(constants).filter(([, value]) => reachableAuthArgs.has(value))
+          )
+      if (Object.keys(matchedConstants).length === 0) continue
+      const permNodes = extractPermissionNodes({ [className]: matchedConstants }, relFile)
       const permEdges = buildHierarchyEdges(permNodes)
       newNodes.push(...permNodes)
       newEdges.push(...permEdges)

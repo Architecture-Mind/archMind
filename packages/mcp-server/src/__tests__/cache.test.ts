@@ -6,6 +6,7 @@ import {
   hasAnyTrackedFileChanged,
   getGraphs,
   invalidate,
+  detectFramework,
   _clearForTesting,
   _setCacheEntry,
   _setTrackedFiles,
@@ -13,13 +14,19 @@ import {
   _isCached,
   _getNestProject,
   _getNestTrackedFiles,
+  _getGoTrackedFiles,
 } from "../cache.js"
 import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 
 const FAKE_GRAPHS: IntermediateExecutionGraph[] = []
 
 function makeTmp(prefix = "archmind-cache-test"): string {
-  const dir = join(tmpdir(), `${prefix}-${Date.now()}`)
+  // Date.now() alone collides: consecutive tests in this file can complete
+  // within the same millisecond, reusing the same dir and leaking files
+  // (e.g. "includes archmind.json when present" writing into the dir the
+  // very next "excludes ... when absent" test then reads).
+  const unique = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const dir = join(tmpdir(), `${prefix}-${unique}`)
   mkdirSync(dir, { recursive: true })
   return dir
 }
@@ -367,5 +374,89 @@ describe("getGraphs() auto-invalidation (integration)", () => {
 
     // Warm re-parse reuses per-file AST cache; report both for reference.
     console.log(`[incremental] cold=${coldMs}ms, warm-reparse=${warmMs}ms`)
+  })
+})
+
+// ── Go/Gin (integration) ─────────────────────────────────────────────────
+
+const GIN_GO_MOD = `module example.com/ginapp
+
+go 1.22
+
+require github.com/gin-gonic/gin v1.10.0
+`
+
+const GIN_MAIN_GO = `package main
+
+func main() {
+	r := gin.Default()
+	routes.RegisterRoutes(r)
+}
+`
+
+const GIN_ROUTES_GO = `package routes
+
+func RegisterRoutes(r *gin.Engine) {
+	r.GET("/ping", handler.Ping)
+}
+`
+
+function makeGinTmp(): { tmp: string; mainFile: string } {
+  const tmp = makeTmp("archmind-go-test")
+  writeFileSync(join(tmp, "go.mod"), GIN_GO_MOD)
+  mkdirSync(join(tmp, "cmd", "server"), { recursive: true })
+  const mainFile = join(tmp, "cmd", "server", "main.go")
+  writeFileSync(mainFile, GIN_MAIN_GO)
+  mkdirSync(join(tmp, "routes"), { recursive: true })
+  writeFileSync(join(tmp, "routes", "routes.go"), GIN_ROUTES_GO)
+  return { tmp, mainFile }
+}
+
+describe("getGraphs() Go/Gin (integration)", () => {
+  test("detectFramework returns \"go\" for a project with go.mod requiring gin-gonic/gin", () => {
+    const { tmp } = makeGinTmp()
+    expect(detectFramework(tmp)).toBe("go")
+  })
+
+  test("cold parse: extracts the route and caches it", () => {
+    const { tmp } = makeGinTmp()
+
+    const graphs = getGraphs(tmp)
+
+    expect(_isCached(tmp)).toBe(true)
+    expect(graphs.some((g) => g.entrypoint === "GET /ping")).toBe(true)
+    const tracked = _getGoTrackedFiles(tmp)
+    expect(tracked).toBeDefined()
+    expect([...tracked!.keys()].some((k) => k.includes("main.go"))).toBe(true)
+  })
+
+  test("no-change second call returns the cached result without re-parsing", () => {
+    const { tmp } = makeGinTmp()
+    const graphs1 = getGraphs(tmp)
+    const graphs2 = getGraphs(tmp)
+    expect(graphs2).toBe(graphs1) // same array reference — proves cache hit
+  })
+
+  test("re-parses after a tracked file's mtime changes", () => {
+    const { tmp, mainFile } = makeGinTmp()
+    getGraphs(tmp)
+    const before = _getGoTrackedFiles(tmp)!.get(join("cmd", "server", "main.go"))!
+
+    bumpMtime(mainFile)
+    getGraphs(tmp)
+
+    const after = _getGoTrackedFiles(tmp)!.get(join("cmd", "server", "main.go"))!
+    expect(after).toBeGreaterThan(before)
+  })
+
+  test("invalidate clears the cache and tracked Go files", () => {
+    const { tmp } = makeGinTmp()
+    getGraphs(tmp)
+    expect(_isCached(tmp)).toBe(true)
+
+    invalidate(tmp)
+
+    expect(_isCached(tmp)).toBe(false)
+    expect(_getGoTrackedFiles(tmp)).toBeUndefined()
   })
 })

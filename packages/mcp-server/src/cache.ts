@@ -1,5 +1,6 @@
 import { parseRouteFile, augmentGraph, loadProjectConfig, resolveAliasMap, ParseCache } from "@kidkender/archmind-laravel-parser"
 import { parseNestJSProjectIncremental, createNestProject } from "@kidkender/archmind-nestjs-parser"
+import { parseGinProjectAt, isGinProject, findGoFiles } from "@kidkender/archmind-go-parser"
 import type { IntermediateExecutionGraph } from "@kidkender/archmind-protocol"
 import { join, relative } from "path"
 import { existsSync, statSync, readdirSync } from "fs"
@@ -15,15 +16,19 @@ const trackedFiles = new Map<string, Map<string, number>>()
 const nestProjects     = new Map<string, Project>()
 // NestJS: relPath → last-seen mtimeMs (*.controller.ts files + archmind.json).
 const nestTrackedFiles = new Map<string, Map<string, number>>()
+// Go: relPath → last-seen mtimeMs for every *.go file discovered by the last parse.
+const goTrackedFiles = new Map<string, Map<string, number>>()
 
-export type Framework = "laravel" | "nestjs"
+export type Framework = "laravel" | "nestjs" | "go"
 
 // Auto-detect framework from project root.
-// nest-cli.json  → NestJS
-// artisan        → Laravel
-// default        → Laravel
+// nest-cli.json           → NestJS
+// go.mod (importing gin)  → Go/Gin
+// artisan                 → Laravel
+// default                 → Laravel
 export function detectFramework(projectRoot: string): Framework {
   if (existsSync(join(projectRoot, "nest-cli.json"))) return "nestjs"
+  if (existsSync(join(projectRoot, "go.mod")) && isGinProject(projectRoot)) return "go"
   return "laravel"
 }
 
@@ -72,6 +77,32 @@ export function hasAnyTrackedFileChanged(projectRoot: string): boolean {
     if (current === null || current !== lastMtime) return true
   }
   return false
+}
+
+// ── Go: whole-project re-parse on any change (no incremental parse cache yet,
+// unlike Laravel's ParseCache/NestJS's warm ts-morph Project — see
+// docs/go-support-plan.md; correctness over parse speed for v1). Detects both
+// edits to tracked files and newly added/removed .go files. ──────────────────
+
+function hasAnyGoFileChanged(projectRoot: string): boolean {
+  const index = goTrackedFiles.get(projectRoot)
+  if (!index) return true
+  const current = findGoFiles(projectRoot)
+  if (current.length !== index.size) return true
+  for (const rel of current) {
+    const mtime = statMtime(join(projectRoot, rel))
+    if (mtime === null || mtime !== index.get(rel)) return true
+  }
+  return false
+}
+
+function buildGoFileIndex(projectRoot: string): Map<string, number> {
+  const index = new Map<string, number>()
+  for (const rel of findGoFiles(projectRoot)) {
+    const mtime = statMtime(join(projectRoot, rel))
+    if (mtime !== null) index.set(rel, mtime)
+  }
+  return index
 }
 
 // ── NestJS incremental helpers ────────────────────────────────────────────────
@@ -157,6 +188,18 @@ function refreshNestProject(project: Project, projectRoot: string): void {
 export function getGraphs(projectRoot: string): IntermediateExecutionGraph[] {
   const framework = detectFramework(projectRoot)
 
+  if (framework === "go") {
+    if (cache.has(projectRoot) && hasAnyGoFileChanged(projectRoot)) {
+      cache.delete(projectRoot)
+    }
+    if (cache.has(projectRoot)) return cache.get(projectRoot)!
+
+    const graphs = parseGinProjectAt(projectRoot)
+    goTrackedFiles.set(projectRoot, buildGoFileIndex(projectRoot))
+    cache.set(projectRoot, graphs)
+    return graphs
+  }
+
   if (framework === "nestjs") {
     // Auto-invalidate if tracked controller/config files changed.
     // Keep nestProjects alive — the cached Project will be refreshed below.
@@ -233,6 +276,7 @@ export function invalidate(projectRoot: string): void {
   trackedFiles.delete(projectRoot)
   nestProjects.delete(projectRoot)
   nestTrackedFiles.delete(projectRoot)
+  goTrackedFiles.delete(projectRoot)
   // Don't clear parseCaches — content-hash keying means a changed file produces
   // a new hash (miss) while unchanged files stay warm. Clearing would only slow
   // the next full re-parse without gaining correctness.
@@ -246,6 +290,7 @@ export function _clearForTesting(): void {
   trackedFiles.clear()
   nestProjects.clear()
   nestTrackedFiles.clear()
+  goTrackedFiles.clear()
 }
 
 export function _setCacheEntry(projectRoot: string, graphs: IntermediateExecutionGraph[]): void {
@@ -270,4 +315,8 @@ export function _getNestProject(projectRoot: string): Project | undefined {
 
 export function _getNestTrackedFiles(projectRoot: string): Map<string, number> | undefined {
   return nestTrackedFiles.get(projectRoot)
+}
+
+export function _getGoTrackedFiles(projectRoot: string): Map<string, number> | undefined {
+  return goTrackedFiles.get(projectRoot)
 }

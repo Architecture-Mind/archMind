@@ -1,7 +1,7 @@
 {
   "name": "@kidkender/archmind",
-  "version": "0.7.2",
-  "description": "Execution topology intelligence for Laravel and NestJS — trace routes, detect regressions, find security gaps. No LLM required.",
+  "version": "0.8.1",
+  "description": "Execution topology intelligence for Laravel, NestJS, and Go/Gin — trace routes, detect regressions, find security gaps. No LLM required.",
   "type": "module",
   "bin": {
     "archmind": "./dist/index.cjs"
@@ -13,17 +13,18 @@
   },
   "dependencies": {
     "tree-sitter": "^0.21.0",
-    "tree-sitter-php": "^0.22.0"
-  },
-  "devDependencies": {
+    "tree-sitter-php": "^0.22.0",
     "@kidkender/archmind-explainer": "*",
     "@kidkender/archmind-laravel-parser": "*",
     "@kidkender/archmind-llm-client": "*",
     "@kidkender/archmind-nestjs-parser": "*",
+    "@kidkender/archmind-go-parser": "*",
     "@kidkender/archmind-orchestrator": "*",
     "@kidkender/archmind-protocol": "*",
     "@kidkender/archmind-retrieval": "*",
-    "@kidkender/archmind-scorer": "*",
+    "@kidkender/archmind-scorer": "*"
+  },
+  "devDependencies": {
     "@types/node": "^20.0.0",
     "esbuild": "^0.28.0",
     "typescript": "^5.4.0"

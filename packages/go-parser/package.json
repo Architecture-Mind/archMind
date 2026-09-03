@@ -1,7 +1,7 @@
 {
-  "name": "@kidkender/archmind-laravel-parser",
-  "version": "0.5.2",
-  "description": "Static analysis parser for Laravel projects — extracts routes, middleware chains, FormRequest validation rules, and auth patterns into ArchMind IR graphs.",
+  "name": "@kidkender/archmind-go-parser",
+  "version": "0.1.0",
+  "description": "Static analysis parser for Go/Gin projects — extracts routes, middleware chains (including runtime skip-lists), and auth patterns into ArchMind IR graphs.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,19 +10,18 @@
   ],
   "keywords": [
     "archmind",
-    "laravel",
-    "php",
+    "go",
+    "golang",
+    "gin",
     "parser",
-    "static-analysis",
-    "form-request",
-    "api-contract"
+    "static-analysis"
   ],
   "license": "MIT",
   "homepage": "https://github.com/Architecture-Mind/ArchMind#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/Architecture-Mind/ArchMind",
-    "directory": "packages/laravel-parser"
+    "directory": "packages/go-parser"
   },
   "engines": {
     "node": ">=18"
@@ -37,8 +36,8 @@
   },
   "dependencies": {
     "@kidkender/archmind-protocol": "^0.5.0",
-    "tree-sitter": "^0.21.0",
-    "tree-sitter-php": "^0.23.0"
+    "tree-sitter": "^0.25.0",
+    "tree-sitter-go": "^0.25.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

@@ -171,14 +171,69 @@ archmind serve --project . --port 4000
 
 ---
 
+## 8. Modular Laravel support (nwidart/laravel-modules)
+
+**Priority:** Medium — real gap found via cross-repo benchmarking, not yet scoped into any plan
+**Effort:** Medium
+**Status:** Not started
+
+Benchmarked against akaunting (642 routes) as a fresh, previously-unseen repo — archMind parsed cleanly (no crashes) but stayed almost silent (6/58 auth-gate/unknown-middleware nodes, 0 service_call/guard/txn/branch nodes despite 642 routes). Root cause: akaunting is a modular Laravel app (`nwidart/laravel-modules` or similar) — real controllers live under `modules/*/Http/Controllers/`, not `app/Http/Controllers/` as the parser assumes. This is a distinct architecture gap from the 6 gaps already fixed for IR v1.5 (koel/BookStack-driven), confirmed independently on invoiceninja and monica (both generalized cleanly with zero changes).
+
+**Deliverables:**
+- Detect `nwidart/laravel-modules`-style layouts (presence of `modules/` dir + module `.json`/service provider registration)
+- Extend controller/namespace resolution (`project-config.ts`, `fqcnToPath`) to resolve module-scoped namespaces
+- Add a benchmark fixture from a real modular Laravel app to `research/golden-traces` to lock in the fix
+
+**Why:** Silent parsing on a whole class of real-world Laravel apps (module-based, common in larger commercial codebases) is worse than an explicit "unsupported" signal — it looks like a clean pass with nothing to report.
+
+---
+
+## 9. Tree-sitter dependency version skew causing flaky parser tests
+
+**Priority:** High — undermines trust in the whole test suite and any CI built on top of it
+**Effort:** Medium
+**Status:** Root cause corrected + primary fix shipped 2026-09-03 (branch `fix/retrieval-flaky-tests-ci`); one deliverable still open
+
+Initial hypothesis (below, kept for record) was a `tree-sitter@^0.21.0` / `tree-sitter-php@^0.23.12` ABI skew. **That was wrong** — disproved empirically: a plain-Node script reusing the same `Parser` singleton for 500 heavy parses in a row had zero failures. The real cause: Jest reuses one worker *process* across multiple test files in the same package; each file re-imports that package's module-level `new Parser()` singleton, and repeatedly re-loading the native tree-sitter addon into the same process is what makes `_parser.parse(source)` intermittently throw — not the grammar/core version pairing itself. Confirmed by setting `maxWorkers` high enough (in `laravel-parser`'s and `springboot-parser`'s `jest.config.js`) that every test file always gets its own process: 5/5 and then 3/3 repeated full-suite runs came back completely clean, both isolated and via `npm test`.
+
+Every parser module still wraps its `_parser.parse()` call in a bare `catch { return <empty defaults> }`, which is what made the (now-fixed) flakiness read as "nothing found" instead of a hard failure for so long, and is also why two unrelated real bugs stayed invisible for a full release cycle: the AUTH-002 `permission-constant` reachability regression (`graph-augmenter.ts`) and `hasTenantContext()` checking a node type (`ir:tenant_context`) that no parser has ever emitted (`namespaces.ts`, `trace-engine.ts`) — both fixed on the same branch.
+
+**Remaining deliverable:**
+- Replace the blanket `catch { return emptyDefaults }` in each parser module with a narrower catch (file-not-found only) so a genuine future parse failure surfaces loudly instead of reading as "no findings" — not done yet; the `maxWorkers` fix removed the trigger but the swallow-everything pattern itself is still there
+
+**Why:** This is very likely *why* there's no CI on this repo at all — a red/green result that changes every run isn't a gate anyone can trust.
+
+---
+
+## 10. Framework #4: Go/Gin support
+
+**Priority:** High — driven by real, current need (Claude/Cursor assisting on 3 live Go repos), not speculative reach
+**Effort:** High (new tree-sitter grammar + new parser package on par with laravel-parser)
+**Status:** Plan drafted 2026-09-03, grounded in 3 real repos — see [`docs/go-support-plan.md`](./go-support-plan.md) for full detail; not yet started
+
+Surveyed `CRM - DG Group/crm-api`, `smart-clinic/smart-clinic-api`, and `prohealth/prohealth-api` — all three share the same stack (Gin + GORM + JWT + go-playground/validator) and near-identical `cmd/`/`routes/`/`internal/{handler,service,middleware,model,dto}` layout, very likely the same personal template reused across projects. That consistency means v1 can target this specific shape narrowly instead of "Go" in general — same lesson as item #3's "don't build the adapter kit before the second framework."
+
+Two findings materially change scope vs. a naive port of the Laravel parser:
+- Route registration spans 3-4 function-call layers (`main.go` → `routes.go` → `routes/*.go`), deeper than Laravel's `RouteServiceProvider` wrapping but the same *kind* of problem, already solved once.
+- The highest-risk gap: global auth middleware (`r.Use(middleware.AuthMiddleware())`) with a **runtime skip-list keyed by method+path** inside the middleware body itself — a naive registration-site check would mark every public route (login, register, health) as authenticated. This is the Go-shaped version of the BookStack false-positive class of bug already hit once in the Laravel parser.
+
+Priority is **MCP/AI-assist value first** (`archmind_get_execution_graph` / `archmind_get_findings` giving accurate route/auth answers for these 3 repos) — CI topology-guard parity is explicitly a later goal, not v1. Phased as: **A** — routes + auth gate (ships first, unblocks most of the MCP value alone), **B** — role/authz-check + validation-gate, **C** — transaction boundary (GORM `.Transaction()` closure — directly transferable technique from Laravel) + isolation (open question, needs more reading).
+
+**Why:** Concrete, current pull (3 real repos in daily use) rather than a hypothetical reach case — different in kind from item #3's speculative "which framework 4" question, which this supersedes for the actual next framework.
+
+---
+
 ## Summary Table
 
 | Idea | Impact | Effort | Recommended Order |
 |------|--------|--------|-------------------|
-| AQL/Constraints in CI (#5) | High | Low-Medium | **1st** — reuses shipped engine |
-| Benchmark CLI (#2) | High | Low | **2nd** |
-| Graph Diff PR Comment (#1) | High | Medium | **3rd** |
-| Auto-fix Suggestions (#4) | Medium | Medium | **4th** |
-| Framework #4 + adapter kit (#3) | High | High | **5th** |
-| Web UI Visualizer (#6) | Medium | High | **6th** |
-| OTel Runtime Expansion (#7) | High | High | **7th** |
+| Tree-sitter flaky tests (#9) | Critical | Low (one deliverable left) | **1st** — narrow the remaining swallow-catch |
+| AQL/Constraints in CI (#5) | High | Low-Medium | **2nd** — reuses shipped engine |
+| Benchmark CLI (#2) | High | Low | **3rd** |
+| Graph Diff PR Comment (#1) | High | Medium | **4th** |
+| Go/Gin support, Phase A (#10) | High | High | **5th** — real current need, MCP value first |
+| Modular Laravel support (#8) | Medium | Medium | **6th** |
+| Auto-fix Suggestions (#4) | Medium | Medium | **7th** |
+| Framework #4 + adapter kit (#3) | High | High | superseded by #10 for the concrete case; keep for a *second* new framework |
+| Web UI Visualizer (#6) | Medium | High | **8th** |
+| OTel Runtime Expansion (#7) | High | High | **9th** |
